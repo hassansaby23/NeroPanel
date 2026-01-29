@@ -1,9 +1,49 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import axios from 'axios';
+import redis from '@/lib/redis';
+import crypto from 'crypto';
+
+// Helper to generate cache key
+function getCacheKey(prefix: string, params: any) {
+  const hash = crypto.createHash('md5').update(JSON.stringify(params)).digest('hex');
+  return `${prefix}:${hash}`;
+}
 
 // Helper to fetch upstream content
 async function fetchUpstream(url: string, params: any) {
+  // Check Cache for specific actions
+  const cacheableActions = [
+      'get_live_streams', 
+      'get_vod_streams', 
+      'get_series', 
+      'get_live_categories', 
+      'get_vod_categories', 
+      'get_series_categories',
+      'get_simple_data_table',
+      'get_vod_info',
+      'get_series_info'
+  ];
+  let cacheKey = '';
+  
+  if (params.action && cacheableActions.includes(params.action)) {
+       // We want to cache the CONTENT list globally, regardless of which user requested it.
+       // This assumes all users have access to the same upstream channel list.
+       // We exclude username/password from the cache key so all users share the same cache entry.
+       
+       const keyParams = { ...params };
+       delete keyParams.username;
+       delete keyParams.password;
+       
+       cacheKey = getCacheKey(`upstream:${params.action}`, keyParams);
+       
+       const cached = await redis.get(cacheKey);
+      if (cached) {
+          console.log(`[Cache] Hit for ${cacheKey}`);
+          return JSON.parse(cached);
+      }
+  }
+
   const startTime = Date.now();
   console.log(`[Upstream] Starting fetch: ${url} (Action: ${params.action})`);
   
@@ -24,6 +64,12 @@ async function fetchUpstream(url: string, params: any) {
     const count = Array.isArray(response.data) ? response.data.length : 'Object';
     console.log(`[Upstream] Success in ${duration}ms. Items: ${count}`);
     
+    // Set Cache
+    if (cacheKey && response.data) {
+        // Cache for 5 minutes (300 seconds)
+        await redis.setex(cacheKey, 300, JSON.stringify(response.data));
+    }
+
     return response.data;
   } catch (error: any) {
     const duration = Date.now() - startTime;
@@ -461,6 +507,21 @@ export async function GET(request: Request) {
         }
     } catch (error) {
         return NextResponse.json({ error: 'Failed to fetch series info' }, { status: 500 });
+    }
+  }
+
+  if (action === 'get_simple_data_table') {
+    const streamId = searchParams.get('stream_id');
+    try {
+        const upstreamData = await fetchUpstream(`${upstreamUrl}/player_api.php`, {
+            username,
+            password,
+            action: 'get_simple_data_table',
+            stream_id: streamId
+        });
+        return NextResponse.json(upstreamData || { epg_listings: [] });
+    } catch (error) {
+        return NextResponse.json({ error: 'Failed to fetch EPG' }, { status: 500 });
     }
   }
 
