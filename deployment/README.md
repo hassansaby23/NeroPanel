@@ -45,13 +45,26 @@ If you are on Windows (PowerShell) or Mac/Linux, you can use `scp` to copy the e
 6.  Click **Quickconnect**.
 7.  Drag the `NeroPanel` folder from your computer (Left side) to the server (Right side).
 
-### Method C: Using Git (If using GitHub/GitLab)
-1.  Push your code to a private repository.
-2.  On the VPS, clone it:
+### Method C: Using Git (Recommended since you use GitHub)
+1.  **Install Git** (if not installed):
     ```bash
-    git clone https://github.com/yourusername/neropanel.git
+    sudo apt install git -y
+    ```
+2.  **Clone your repository**:
+    *   If **Public**:
+        ```bash
+        git clone https://github.com/yourusername/neropanel.git
+        ```
+    *   If **Private** (HTTPS Token):
+        ```bash
+        # You will be asked for username and a Personal Access Token (Password)
+        git clone https://github.com/yourusername/neropanel.git
+        ```
+3.  **Enter the folder**:
+    ```bash
     cd neropanel
     ```
+    *Note: If the folder name is different (e.g. `NeroPanel` vs `neropanel`), check with `ls`.*
 
 ## Step 3: Configure Environment
 
@@ -79,6 +92,31 @@ docker compose up -d --build
 ```
 
 This will start NeroPanel on port `3000`.
+
+## Useful Commands
+
+### Check Logs
+If something isn't working, check the logs to see errors:
+
+*   **View all logs**:
+    ```bash
+    docker compose logs -f
+    ```
+*   **View specific service logs** (e.g., just the app):
+    ```bash
+    docker compose logs -f app
+    ```
+    *(Press `Ctrl+C` to exit the logs)*
+
+### Restart the App
+If you change the `.env` file or update code:
+```bash
+docker compose restart app
+```
+or to rebuild:
+```bash
+docker compose up -d --build
+```
 
 ## Step 5: Assign Domains & Split Host/Panel
 

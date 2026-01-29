@@ -82,3 +82,27 @@ CREATE TABLE IF NOT EXISTS content_routing (
 -- create indexes
 CREATE INDEX IF NOT EXISTS idx_routing_content ON content_routing(content_id, content_source);
 CREATE INDEX IF NOT EXISTS idx_routing_priority ON content_routing(priority DESC);
+
+-- create table
+CREATE TABLE IF NOT EXISTS channel_overrides (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    stream_id VARCHAR(100) UNIQUE NOT NULL,
+    logo_url TEXT,
+    custom_name VARCHAR(255),
+    is_hidden BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- create indexes
+CREATE INDEX IF NOT EXISTS idx_channel_overrides_stream_id ON channel_overrides(stream_id);
+
+-- create table
+CREATE TABLE IF NOT EXISTS category_overrides (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id VARCHAR(100) UNIQUE NOT NULL,
+    is_hidden BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- create indexes
+CREATE INDEX IF NOT EXISTS idx_category_overrides_category_id ON category_overrides(category_id);
