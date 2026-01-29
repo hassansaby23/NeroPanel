@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS synced_content (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     upstream_server_id UUID REFERENCES upstream_servers(id) ON DELETE CASCADE,
     stream_id VARCHAR(100) NOT NULL,
-    name VARCHAR(255) NOT NULL,
+    name TEXT NOT NULL,
     stream_type VARCHAR(20) CHECK (stream_type IN ('live', 'vod', 'series')),
     stream_icon TEXT,
     stream_url TEXT,
@@ -100,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_channel_overrides_stream_id ON channel_overrides(
 CREATE TABLE IF NOT EXISTS category_overrides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category_id VARCHAR(100) UNIQUE NOT NULL,
+    category_name VARCHAR(255),
     is_hidden BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
