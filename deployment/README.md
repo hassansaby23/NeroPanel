@@ -120,6 +120,20 @@ If you cannot connect, your VPS firewall might be blocking the connection.
 
 ## Troubleshooting
 
+### "Address already in use" Error
+If you see `failed to bind host port 0.0.0.0:80`, it means something else (like Apache or a default Nginx) is already using Port 80.
+Kill the conflicting process:
+```bash
+sudo systemctl stop nginx
+sudo systemctl disable nginx
+sudo systemctl stop apache2
+sudo systemctl disable apache2
+```
+Then restart Docker:
+```bash
+docker compose up -d
+```
+
 ### Build Errors (Snapshot not found)
 If you see errors like `failed to prepare extraction snapshot` or `parent snapshot does not exist`, your Docker cache is corrupted. Run these commands:
 
