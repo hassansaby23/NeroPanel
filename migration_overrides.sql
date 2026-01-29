@@ -39,9 +39,35 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_local_content_category ON local_content(category_id);
     END IF;
 
-    -- Add stream_id to local_content if missing (for custom numeric IDs)
+    -- Add stream_id to local_content if missing
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='local_content' AND column_name='stream_id') THEN
         ALTER TABLE local_content ADD COLUMN stream_id VARCHAR(100);
         CREATE INDEX IF NOT EXISTS idx_local_content_stream_id ON local_content(stream_id);
+    END IF;
+
+    -- Add category_name to local_content if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='local_content' AND column_name='category_name') THEN
+        ALTER TABLE local_content ADD COLUMN category_name VARCHAR(255);
+    END IF;
+    
+    -- Add subtitle_url to local_content if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='local_content' AND column_name='subtitle_url') THEN
+        ALTER TABLE local_content ADD COLUMN subtitle_url TEXT;
+    END IF;
+END $$;
+
+-- Add updated_at to channel_overrides if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='channel_overrides' AND column_name='updated_at') THEN
+        ALTER TABLE channel_overrides ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+    END IF;
+END $$;
+
+-- Add updated_at to category_overrides if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='category_overrides' AND column_name='updated_at') THEN
+        ALTER TABLE category_overrides ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
     END IF;
 END $$;

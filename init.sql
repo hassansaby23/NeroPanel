@@ -59,7 +59,9 @@ CREATE TABLE IF NOT EXISTS local_content (
     stream_url TEXT NOT NULL,
     metadata JSONB,
     category_id VARCHAR(50) DEFAULT '0',
+    category_name VARCHAR(255),
     stream_id VARCHAR(100),
+    subtitle_url TEXT,
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -94,7 +96,8 @@ CREATE TABLE IF NOT EXISTS channel_overrides (
     logo_url TEXT,
     custom_name VARCHAR(255),
     is_hidden BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- create indexes
@@ -106,7 +109,8 @@ CREATE TABLE IF NOT EXISTS category_overrides (
     category_id VARCHAR(100) UNIQUE NOT NULL,
     category_name VARCHAR(255),
     is_hidden BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- create indexes
