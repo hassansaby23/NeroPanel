@@ -19,7 +19,11 @@ export function middleware(request: NextRequest) {
   
   // We check if the hostname matches the Panel Domain.
   // If panelDomain is set, and the current host is DIFFERENT, assume it's the DNS host.
-  if (panelDomain && hostname !== panelDomain && !hostname.includes('localhost')) {
+  // IMPORTANT: We strip the port number if present (e.g. localhost:3000 -> localhost)
+  const currentHost = hostname.split(':')[0];
+  const configPanelHost = panelDomain ? panelDomain.split(':')[0] : '';
+
+  if (configPanelHost && currentHost !== configPanelHost && !currentHost.includes('localhost')) {
       const path = url.pathname;
       
       // Allowed paths for the DNS/Streaming host
@@ -37,7 +41,7 @@ export function middleware(request: NextRequest) {
       
       // If they try to access the Dashboard (/) or other UI pages, show 404 or specific message
       if (!isAllowed) {
-           return new NextResponse('NeroPanel DNS Access - Unauthorized UI', { status: 403 });
+           return new NextResponse('Unauthorized', { status: 401 });
       }
   }
 
