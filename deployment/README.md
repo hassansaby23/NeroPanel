@@ -87,6 +87,7 @@ Run the application using Docker Compose. This will start the Database, App, Red
 ```bash
 docker compose up -d --build
 ```
+*Note: The first build can take 5-10 minutes. You won't see logs immediately until the build finishes.*
 
 ## Step 6: Cloudflare Configuration (Fix "Timed Out")
 
@@ -129,7 +130,8 @@ docker system prune -f
 docker compose up -d --build --force-recreate
 ```
 
-### Check Logs
+### Check Logs (After Build Finishes)
+You can only see runtime logs **after** the build process completes.
 ```bash
 docker compose logs -f
 ```
