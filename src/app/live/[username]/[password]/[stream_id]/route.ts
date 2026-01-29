@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import { getActiveUpstreamServer } from '@/lib/server_config';
 
 interface Props {
   params: Promise<{
@@ -17,22 +17,17 @@ export async function GET(
   const { username, password, stream_id } = params;
 
   try {
-    // 1. Get Upstream URL
-    const serverRes = await pool.query(
-      'SELECT server_url FROM upstream_servers WHERE is_active = true LIMIT 1'
-    );
+    // 1. Get Upstream URL (Cached)
+    const config = await getActiveUpstreamServer();
 
-    if (!serverRes.rowCount || serverRes.rowCount === 0) {
+    if (!config) {
       return new NextResponse('No active upstream server', { status: 503 });
     }
-
-    let upstreamUrl = serverRes.rows[0].server_url;
-    if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
 
     // 2. Construct Redirect URL
     // Standard Xtream: http://server:port/live/user/pass/id.ts
     // We preserve the incoming ID which likely includes .ts or .m3u8 extension
-    const redirectUrl = `${upstreamUrl}/live/${username}/${password}/${stream_id}`;
+    const redirectUrl = `${config.server_url}/live/${username}/${password}/${stream_id}`;
 
     // 3. Redirect
     return NextResponse.redirect(redirectUrl);

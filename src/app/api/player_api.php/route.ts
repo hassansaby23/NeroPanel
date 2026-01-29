@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import axios from 'axios';
 import redis from '@/lib/redis';
 import crypto from 'crypto';
+import { getActiveUpstreamServer } from '@/lib/server_config';
 
 // Helper to generate cache key
 function getCacheKey(prefix: string, params: any) {
@@ -94,13 +95,9 @@ export async function GET(request: Request) {
   // 1. Get Active Upstream Server (Just the URL)
   let upstreamUrl = '';
   try {
-    const serverRes = await pool.query(
-      'SELECT server_url FROM upstream_servers WHERE is_active = true LIMIT 1'
-    );
-    if (serverRes.rowCount && serverRes.rowCount > 0) {
-      upstreamUrl = serverRes.rows[0].server_url;
-      // Ensure no trailing slash
-      if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
+    const config = await getActiveUpstreamServer();
+    if (config) {
+      upstreamUrl = config.server_url;
     } else {
       console.warn('No active upstream server configured.');
     }

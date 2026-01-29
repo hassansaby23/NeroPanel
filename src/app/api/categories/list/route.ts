@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import axios from 'axios';
+import { getActiveUpstreamServer } from '@/lib/server_config';
 
 // Helper (Duplicated from other files)
 async function fetchUpstream(url: string, params: any) {
@@ -24,18 +25,17 @@ export async function GET(request: Request) {
   const type = searchParams.get('type') || 'live'; // live, vod, series
 
   try {
-    // 1. Get Upstream Config
-    const serverRes = await pool.query(
-      'SELECT server_url, username, password_hash FROM upstream_servers WHERE is_active = true LIMIT 1'
-    );
+    // 1. Get Upstream Config (Cached)
+    const config = await getActiveUpstreamServer();
 
-    if (serverRes.rowCount === 0) {
+    if (!config) {
       return NextResponse.json({ error: 'No active upstream server' }, { status: 404 });
     }
 
-    const { server_url, username, password_hash } = serverRes.rows[0];
+    const { server_url, username, password_hash } = config;
     let cleanUrl = server_url;
-    if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
+    // URL is already normalized in helper, but double check not needed if we trust helper
+
 
     // 2. Determine Action
     let action = 'get_live_categories';

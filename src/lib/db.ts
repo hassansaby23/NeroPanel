@@ -7,6 +7,9 @@ declare global {
 
 const pool = global.pool || new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: parseInt(process.env.DB_MAX_CONNECTIONS || '50'), // Increased default for higher concurrency
+  idleTimeoutMillis: 30000, 
+  connectionTimeoutMillis: 5000, 
 });
 
 if (process.env.NODE_ENV === 'development') {
