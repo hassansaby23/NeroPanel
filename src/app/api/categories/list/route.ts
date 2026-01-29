@@ -1,0 +1,82 @@
+import { NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import axios from 'axios';
+
+// Helper (Duplicated from other files)
+async function fetchUpstream(url: string, params: any) {
+  try {
+    const response = await axios.get(url, { 
+      params, 
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      }
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('Upstream Fetch Error:', error.message);
+    return null;
+  }
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get('type') || 'live'; // live, vod, series
+
+  try {
+    // 1. Get Upstream Config
+    const serverRes = await pool.query(
+      'SELECT server_url, username, password_hash FROM upstream_servers WHERE is_active = true LIMIT 1'
+    );
+
+    if (serverRes.rowCount === 0) {
+      return NextResponse.json({ error: 'No active upstream server' }, { status: 404 });
+    }
+
+    const { server_url, username, password_hash } = serverRes.rows[0];
+    let cleanUrl = server_url;
+    if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
+
+    // 2. Determine Action
+    let action = 'get_live_categories';
+    if (type === 'vod') action = 'get_vod_categories';
+    if (type === 'series') action = 'get_series_categories';
+
+    // 3. Parallel Fetch
+    const [upstreamData, overridesRes] = await Promise.all([
+      fetchUpstream(`${cleanUrl}/player_api.php`, {
+        username,
+        password: password_hash,
+        action
+      }),
+      pool.query('SELECT category_id, category_name, is_hidden FROM category_overrides')
+    ]);
+
+    const upstreamItems = Array.isArray(upstreamData) ? upstreamData : [];
+    
+    // 4. Merge
+    const overrideMap = new Map();
+    overridesRes.rows.forEach(row => {
+        overrideMap.set(row.category_id, row);
+    });
+
+    const categories = upstreamItems.map((item: any) => {
+        const cid = item.category_id;
+        const override = overrideMap.get(cid);
+        
+        return {
+            category_id: cid,
+            category_name: override?.category_name && override.category_name.trim() !== '' ? override.category_name : item.category_name,
+            original_name: item.category_name,
+            parent_id: item.parent_id || 0,
+            is_hidden: override?.is_hidden || false
+        };
+    });
+
+    return NextResponse.json(categories);
+
+  } catch (error: any) {
+    console.error('Category List Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

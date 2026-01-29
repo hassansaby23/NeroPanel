@@ -1,65 +1,98 @@
-import Image from "next/image";
+import { Activity, Server, Film, Database, Tv } from 'lucide-react';
+import pool from '@/lib/db';
+import Link from 'next/link';
 
-export default function Home() {
+export const dynamic = 'force-dynamic';
+
+async function getStats() {
+  try {
+    const [upstreamRes, localRes, syncedRes] = await Promise.all([
+      pool.query('SELECT count(*) FROM upstream_servers'),
+      pool.query('SELECT count(*) FROM local_content'),
+      pool.query('SELECT count(*) FROM synced_content')
+    ]);
+
+    return {
+      upstreamCount: parseInt(upstreamRes.rows[0].count, 10),
+      localCount: parseInt(localRes.rows[0].count, 10),
+      syncedCount: parseInt(syncedRes.rows[0].count, 10),
+    };
+  } catch (error) {
+    console.error('Stats Error:', error);
+    return { upstreamCount: 0, localCount: 0, syncedCount: 0 };
+  }
+}
+
+export default async function Dashboard() {
+  const stats = await getStats();
+  const totalContent = stats.localCount + stats.syncedCount;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="p-8">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+        <p className="text-slate-500 mt-2">System Overview and Status</p>
+      </header>
+
+      {/* Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Link href="/upstream" className="block bg-white p-6 rounded-lg shadow-sm border border-slate-200 hover:border-blue-500 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-500">Upstream Servers</h3>
+            <Server className="w-5 h-5 text-blue-500" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">{stats.upstreamCount}</div>
+          <div className="text-xs text-slate-500 mt-1">Manage Connections</div>
+        </Link>
+        
+        <Link href="/channels" className="block bg-white p-6 rounded-lg shadow-sm border border-slate-200 hover:border-blue-500 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-500">Live Channels</h3>
+            <Tv className="w-5 h-5 text-purple-500" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">Manager</div>
+          <div className="text-xs text-slate-500 mt-1">Edit Logos & Names</div>
+        </Link>
+
+        <Link href="/local-content" className="block bg-white p-6 rounded-lg shadow-sm border border-slate-200 hover:border-blue-500 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-500">Local Items</h3>
+            <Film className="w-5 h-5 text-green-500" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">{stats.localCount}</div>
+          <div className="text-xs text-slate-500 mt-1">Manage Movies/Series</div>
+        </Link>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-500">API Requests</h3>
+            <Activity className="w-5 h-5 text-orange-500" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">--</div>
+          <div className="text-xs text-slate-500 mt-1">Real-time load</div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+
+      {/* Recent Activity / Placeholders */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Upstream Health</h3>
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-50 rounded-md text-center text-slate-500 text-sm">
+              No upstream servers configured.
+            </div>
+          </div>
         </div>
-      </main>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent API Errors</h3>
+          <div className="space-y-4">
+             <div className="p-4 bg-slate-50 rounded-md text-center text-slate-500 text-sm">
+              No errors logged.
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
