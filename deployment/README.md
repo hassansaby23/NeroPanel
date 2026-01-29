@@ -7,6 +7,7 @@ This guide explains how to host NeroPanel on a VPS, assign domains, and separate
 1.  **VPS**: A Virtual Private Server (Ubuntu 20.04 or 22.04 LTS recommended).
 2.  **Domain**: One or more domains (e.g., `yourdomain.com`).
 3.  **SSH Client**: PuTTY (Windows) or Terminal (Mac/Linux).
+4.  **Cloudflare Account**: Recommended for DNS and SSL management.
 
 ## Step 1: Prepare the VPS
 
@@ -25,28 +26,8 @@ This guide explains how to host NeroPanel on a VPS, assign domains, and separate
 
 Choose one of the following methods to upload your code to the VPS.
 
-### Method A: Using SCP (Recommended for Command Line)
-If you are on Windows (PowerShell) or Mac/Linux, you can use `scp` to copy the entire folder securely.
-
-1.  Open your terminal on your **local computer**.
-2.  Run the following command (replace `your_vps_ip` with your actual server IP):
-    ```bash
-    # Run this from your Desktop folder
-    scp -r NeroPanel root@your_vps_ip:/root/
-    ```
-    *Note: If you use a key file, add `-i path/to/key.pem` before the source folder.*
-
-### Method B: Using FileZilla (Visual Interface)
-1.  Download and install [FileZilla Client](https://filezilla-project.org/).
-2.  Open FileZilla.
-3.  **Host**: `sftp://your_vps_ip`
-4.  **Username**: `root`
-5.  **Password**: Your VPS password.
-6.  Click **Quickconnect**.
-7.  Drag the `NeroPanel` folder from your computer (Left side) to the server (Right side).
-
-### Method C: Using Git (Recommended since you use GitHub)
-1.  **Install Git** (if not installed):
+### Method A: Using Git (Recommended)
+1.  **Install Git**:
     ```bash
     sudo apt install git -y
     ```
@@ -64,136 +45,93 @@ If you are on Windows (PowerShell) or Mac/Linux, you can use `scp` to copy the e
     ```bash
     cd neropanel
     ```
-    *Note: If the folder name is different (e.g. `NeroPanel` vs `neropanel`), check with `ls`.*
+
+### Method B: Using SCP or FileZilla
+(See previous guides if you prefer manual upload)
 
 ## Step 3: Configure Environment
 
 1.  Navigate to the project directory:
     ```bash
-    cd NeroPanel
+    cd neropanel
     ```
-2.  Create a `.env` file (if not uploaded):
+2.  Create a `.env` file:
     ```bash
     nano .env
     ```
-3.  Add your secrets (replace with secure values):
+3.  Add your secrets:
     ```env
     DB_PASSWORD=your_secure_db_password
     NEXTAUTH_SECRET=your_random_secret_string
+    NEXTAUTH_URL=http://panel.yourdomain.com
     ```
-    *Tip: You can generate a secret with `openssl rand -base64 32`.*
+    *Note: Replace `panel.yourdomain.com` with your actual panel domain.*
 
-## Step 4: Start the Application
+## Step 4: Configure Domains & Nginx
 
-Run the application using Docker Compose:
+The project now includes a built-in Nginx server. You don't need to install Nginx manually on the VPS.
+
+1.  **Edit the Nginx Config**:
+    ```bash
+    nano deployment/nginx.conf
+    ```
+2.  **Update Domain Names**:
+    Find `server_name` lines and change them to your actual domains:
+    *   `server_name panel.yourdomain.com;` -> Your Admin Panel domain.
+    *   `server_name dns.yourdomain.com;` -> Your Streaming/DNS domain.
+
+## Step 5: Start the Application
+
+Run the application using Docker Compose. This will start the Database, App, Redis, and Nginx.
 
 ```bash
 docker compose up -d --build
 ```
 
-This will start NeroPanel on port `3000`.
+## Step 6: Cloudflare Configuration (Fix "Timed Out")
 
-## Useful Commands
+If you are using Cloudflare, you **MUST** follow these settings to avoid "Timed Out" or "Too many redirects" errors.
+
+1.  **DNS Records**:
+    *   Add an **A Record** for your panel (e.g., `panel`) pointing to your VPS IP. Make sure the **Proxy status** is **Proxied** (Orange Cloud).
+    *   Add an **A Record** for your DNS host (e.g., `dns`) pointing to your VPS IP.
+
+2.  **SSL/TLS Settings (CRITICAL)**:
+    *   Go to **SSL/TLS** > **Overview** in Cloudflare.
+    *   Set the encryption mode to **Flexible**.
+    *   *Why?* The VPS listens on HTTP (Port 80). Cloudflare handles the HTTPS connection to the user and talks to the VPS over HTTP. If you set this to "Full" or "Strict", Cloudflare tries to talk to the VPS on Port 443, which will fail/timeout.
+
+3.  **Edge Certificates**:
+    *   Go to **SSL/TLS** > **Edge Certificates**.
+    *   Enable **Always Use HTTPS**.
+
+## Step 7: Firewall Configuration
+
+If you cannot connect, your VPS firewall might be blocking the connection.
+
+1.  Allow standard ports:
+    ```bash
+    sudo ufw allow 22/tcp   # SSH (Don't lock yourself out!)
+    sudo ufw allow 80/tcp   # HTTP
+    sudo ufw allow 443/tcp  # HTTPS
+    sudo ufw enable
+    ```
+
+## Troubleshooting
 
 ### Check Logs
-If something isn't working, check the logs to see errors:
-
-*   **View all logs**:
-    ```bash
-    docker compose logs -f
-    ```
-*   **View specific service logs** (e.g., just the app):
-    ```bash
-    docker compose logs -f app
-    ```
-    *(Press `Ctrl+C` to exit the logs)*
-
-### Restart the App
-If you change the `.env` file or update code:
 ```bash
-docker compose restart app
-```
-or to rebuild:
-```bash
-docker compose up -d --build
+docker compose logs -f
 ```
 
-## Step 5: Assign Domains & Split Host/Panel
-
-You can use **Nginx** to handle domains and separate the "Panel" (UI) from the "Host" (Streaming URL).
-
-1.  Install Nginx:
-    ```bash
-    sudo apt install nginx -y
-    ```
-
-2.  Configure Nginx:
-    *   Edit the default config or create a new one:
-        ```bash
-        sudo nano /etc/nginx/sites-available/neropanel
-        ```
-    *   Paste the configuration below (adjusting `server_name`):
-
-    ```nginx
-    upstream neropanel {
-        server 127.0.0.1:3000;
-    }
-
-    # 1. THE PANEL (UI)
-    server {
-        listen 80;
-        server_name panel.yourdomain.com; # <--- CHANGE THIS
-
-        location / {
-            proxy_pass http://neropanel;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
-        }
-    }
-
-    # 2. THE HOST (DNS/Streaming)
-    server {
-        listen 80;
-        server_name dns.yourdomain.com; # <--- CHANGE THIS
-
-        location / {
-            proxy_pass http://neropanel;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
-        }
-    }
-    ```
-
-3.  Enable the site and restart Nginx:
-    ```bash
-    sudo ln -s /etc/nginx/sites-available/neropanel /etc/nginx/sites-enabled/
-    sudo nginx -t
-    sudo systemctl restart nginx
-    ```
-
-4.  **DNS Records**:
-    *   Go to your Domain Registrar (Namecheap, GoDaddy, Cloudflare).
-    *   Create an **A Record** for `panel` pointing to your VPS IP.
-    *   Create an **A Record** for `dns` (or whatever you call the host) pointing to your VPS IP.
-
-## Step 6: SSL (HTTPS)
-
-Secure your domains with Certbot:
-
+### Restart Nginx Only
+If you changed `deployment/nginx.conf`:
 ```bash
-sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d panel.yourdomain.com -d dns.yourdomain.com
+docker compose restart nginx
 ```
 
-Follow the prompts to enable HTTPS.
-
-## Summary
-
-*   **Panel URL**: `https://panel.yourdomain.com` (Used by you to manage)
-*   **Host URL**: `http://dns.yourdomain.com` (Used in IPTV players)
+### Database Errors
+If you see "relation does not exist" errors:
+```bash
+cat migration_overrides.sql | docker compose exec -T postgres psql -U neropanel -d neropanel
+```

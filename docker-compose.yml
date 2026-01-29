@@ -32,6 +32,16 @@ services:
       - ./public:/app/public
     restart: unless-stopped
 
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deployment/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     ports:
