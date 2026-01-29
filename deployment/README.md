@@ -119,6 +119,16 @@ If you cannot connect, your VPS firewall might be blocking the connection.
 
 ## Troubleshooting
 
+### Build Errors (Snapshot not found)
+If you see errors like `failed to prepare extraction snapshot` or `parent snapshot does not exist`, your Docker cache is corrupted. Run these commands:
+
+```bash
+docker compose down
+docker builder prune -a -f
+docker system prune -f
+docker compose up -d --build --force-recreate
+```
+
 ### Check Logs
 ```bash
 docker compose logs -f
