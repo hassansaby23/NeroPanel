@@ -14,6 +14,14 @@ async function fetchXtream(url: string, params: any) {
 }
 
 export async function GET(request: Request) {
+  return handleRequest(request);
+}
+
+export async function POST(request: Request) {
+  return handleRequest(request);
+}
+
+async function handleRequest(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
   const type = searchParams.get('type');
@@ -130,19 +138,35 @@ export async function GET(request: Request) {
         let targetUrl = `${upstreamUrl}${targetPath}?${searchParams.toString()}`;
         console.log(`[Stalker Proxy] Attempt 1: ${targetUrl}`);
 
+        const method = request.method;
+        let requestBody = null;
+        if (method !== 'GET' && method !== 'HEAD') {
+            try {
+                requestBody = await request.arrayBuffer();
+            } catch (e) {
+                console.warn('Could not read request body', e);
+            }
+        }
+
         try {
-            let proxyRes = await axios.get(targetUrl, { 
+            let proxyRes = await axios({
+                method: method,
+                url: targetUrl,
+                data: requestBody,
                 headers: forwardHeaders,
-                validateStatus: () => true 
+                validateStatus: () => true
             });
 
             // If 404, try /portal.php
             if (proxyRes.status === 404) {
                  console.log(`[Stalker Proxy] Attempt 1 failed (404). Trying /portal.php`);
                  targetUrl = `${upstreamUrl}/portal.php?${searchParams.toString()}`;
-                 proxyRes = await axios.get(targetUrl, { 
+                 proxyRes = await axios({
+                    method: method,
+                    url: targetUrl,
+                    data: requestBody,
                     headers: forwardHeaders,
-                    validateStatus: () => true 
+                    validateStatus: () => true
                  });
             }
             
@@ -150,9 +174,12 @@ export async function GET(request: Request) {
             if (proxyRes.status === 404) {
                  console.log(`[Stalker Proxy] Attempt 2 failed (404). Trying /stalker_portal/server/load.php`);
                  targetUrl = `${upstreamUrl}/stalker_portal/server/load.php?${searchParams.toString()}`;
-                 proxyRes = await axios.get(targetUrl, { 
+                 proxyRes = await axios({
+                    method: method,
+                    url: targetUrl,
+                    data: requestBody,
                     headers: forwardHeaders,
-                    validateStatus: () => true 
+                    validateStatus: () => true
                  });
             }
 
