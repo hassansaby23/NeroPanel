@@ -38,4 +38,10 @@ BEGIN
         ALTER TABLE local_content ADD COLUMN category_id VARCHAR(50) DEFAULT '0';
         CREATE INDEX IF NOT EXISTS idx_local_content_category ON local_content(category_id);
     END IF;
+
+    -- Add stream_id to local_content if missing (for custom numeric IDs)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='local_content' AND column_name='stream_id') THEN
+        ALTER TABLE local_content ADD COLUMN stream_id VARCHAR(100);
+        CREATE INDEX IF NOT EXISTS idx_local_content_stream_id ON local_content(stream_id);
+    END IF;
 END $$;
