@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import axios from 'axios';
+import { getActiveUpstreamServer } from '@/lib/server_config';
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug?: string[] }> }) {
     return handleRequest(request, params);
@@ -26,10 +27,9 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
     // But let's proxy EVERYTHING we don't handle locally to the upstream.
     
     try {
-        const serverRes = await pool.query(
-            'SELECT server_url FROM upstream_servers WHERE is_active = true LIMIT 1'
-        );
-        let upstreamUrl = serverRes.rows[0]?.server_url || '';
+        const config = await getActiveUpstreamServer();
+        let upstreamUrl = config?.server_url || '';
+        // Helper already handles trailing slash, but just in case
         if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
         
         // Construct upstream URL

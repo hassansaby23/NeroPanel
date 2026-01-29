@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import axios from 'axios';
+import { getActiveUpstreamServer } from '@/lib/server_config';
 
 // Helper: Fetch Xtream API
 async function fetchXtream(url: string, params: any) {
@@ -104,11 +105,9 @@ async function handleRequest(request: Request) {
         device.password = row.password;
     }
 
-    // 2. Get Upstream Config
-    const serverRes = await pool.query(
-      'SELECT server_url FROM upstream_servers WHERE is_active = true LIMIT 1'
-    );
-    let upstreamUrl = serverRes.rows[0]?.server_url || '';
+    // 2. Get Upstream Config (Cached)
+    const config = await getActiveUpstreamServer();
+    let upstreamUrl = config?.server_url || '';
     if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
     
     // --- PROXY MODE HANDLER ---
