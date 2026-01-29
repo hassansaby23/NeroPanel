@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS local_content (
     poster_url TEXT,
     stream_url TEXT NOT NULL,
     metadata JSONB,
+    category_id VARCHAR(50) DEFAULT '0',
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS local_content (
 
 -- create indexes
 CREATE INDEX IF NOT EXISTS idx_local_content_type ON local_content(content_type);
+CREATE INDEX IF NOT EXISTS idx_local_content_category ON local_content(category_id);
 CREATE INDEX IF NOT EXISTS idx_local_content_created_at ON local_content(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_local_content_created_by ON local_content(created_by);
 

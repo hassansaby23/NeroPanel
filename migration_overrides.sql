@@ -30,3 +30,12 @@ END $$;
 
 -- Fix "value too long" for synced_content name
 ALTER TABLE synced_content ALTER COLUMN name TYPE TEXT;
+
+-- Add category_id to local_content if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='local_content' AND column_name='category_id') THEN
+        ALTER TABLE local_content ADD COLUMN category_id VARCHAR(50) DEFAULT '0';
+        CREATE INDEX IF NOT EXISTS idx_local_content_category ON local_content(category_id);
+    END IF;
+END $$;
