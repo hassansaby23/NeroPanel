@@ -29,6 +29,8 @@ export function middleware(request: NextRequest) {
       // Allowed paths for the DNS/Streaming host
       const allowedPaths = [
           '/player_api.php',
+          '/portal.php',
+          '/stalker_portal/',
           '/c/',
           '/live/',
           '/movie/',
