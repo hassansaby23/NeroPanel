@@ -541,15 +541,30 @@ export async function GET(request: Request) {
   }
 
   // Default: Return Auth Info (Login success)
-  // We use the upstream user info but might override server info to point to us?
-  // Actually, standard players just need the info.
+  const hostHeader = request.headers.get('host') || 'localhost';
+  const protocolHeader = request.headers.get('x-forwarded-proto') || 'http';
+  
+  // Parse host and port
+  let serverUrl = hostHeader;
+  let serverPort = '80';
+  let serverHttpsPort = '443';
+  
+  if (hostHeader.includes(':')) {
+      const parts = hostHeader.split(':');
+      serverUrl = parts[0];
+      serverPort = parts[1];
+  } else {
+      serverPort = protocolHeader === 'https' ? '443' : '80';
+  }
+
   return NextResponse.json({
     user_info: upstreamUserInfo,
     server_info: {
         ...upstreamServerInfo,
-        url: "neropanel-proxy", // Override to show our branding? Or keep upstream?
-        // Let's keep upstream info but ensure ports match if needed.
-        // Usually safe to pass through.
+        url: serverUrl, 
+        port: serverPort,
+        https_port: serverHttpsPort,
+        server_protocol: protocolHeader
     }
   });
 }
