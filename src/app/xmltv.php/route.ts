@@ -1,0 +1,51 @@
+import { NextResponse } from 'next/server';
+import axios from 'axios';
+import { getActiveUpstreamServer } from '@/lib/server_config';
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const username = searchParams.get('username');
+  const password = searchParams.get('password');
+
+  if (!username || !password) {
+    return new NextResponse('Missing credentials', { status: 401 });
+  }
+
+  try {
+    const config = await getActiveUpstreamServer();
+    if (!config) {
+      return new NextResponse('No upstream server configured', { status: 503 });
+    }
+
+    let upstreamUrl = config.server_url;
+    if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
+
+    console.log(`[XMLTV] Fetching EPG from ${upstreamUrl}/xmltv.php`);
+
+    const response = await axios.get(`${upstreamUrl}/xmltv.php`, {
+      params: { username, password },
+      responseType: 'arraybuffer', // Use arraybuffer to preserve encoding
+      timeout: 120000, // 2 minutes timeout
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+
+    const headers = new Headers();
+    headers.set('Content-Type', response.headers['content-type'] || 'application/xml');
+    if (response.headers['content-disposition']) {
+        headers.set('Content-Disposition', response.headers['content-disposition']);
+    } else {
+        headers.set('Content-Disposition', 'attachment; filename="epg.xml"');
+    }
+
+    return new NextResponse(response.data, {
+      status: 200,
+      headers
+    });
+
+  } catch (error: any) {
+    console.error('[XMLTV] Error:', error.message);
+    return new NextResponse('Failed to fetch EPG', { status: 500 });
+  }
+}

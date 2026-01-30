@@ -22,6 +22,7 @@ async function fetchUpstream(url: string, params: any) {
       'get_vod_categories', 
       'get_series_categories',
       'get_simple_data_table',
+      'get_short_epg',
       'get_vod_info',
       'get_series_info'
   ];
@@ -519,6 +520,23 @@ export async function GET(request: Request) {
         return NextResponse.json(upstreamData || { epg_listings: [] });
     } catch (error) {
         return NextResponse.json({ error: 'Failed to fetch EPG' }, { status: 500 });
+    }
+  }
+
+  if (action === 'get_short_epg') {
+    const streamId = searchParams.get('stream_id');
+    const limit = searchParams.get('limit');
+    try {
+        const upstreamData = await fetchUpstream(`${upstreamUrl}/player_api.php`, {
+            username,
+            password,
+            action: 'get_short_epg',
+            stream_id: streamId,
+            limit: limit
+        });
+        return NextResponse.json(upstreamData || { epg_listings: [] });
+    } catch (error) {
+        return NextResponse.json({ error: 'Failed to fetch short EPG' }, { status: 500 });
     }
   }
 
