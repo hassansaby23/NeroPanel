@@ -27,7 +27,13 @@ export async function GET(
     // 2. Construct Redirect URL
     // Standard Xtream: http://server:port/live/user/pass/id.ts
     // We preserve the incoming ID which likely includes .ts or .m3u8 extension
-    const redirectUrl = `${config.server_url}/live/${username}/${password}/${stream_id}`;
+    let redirectUrl = `${config.server_url}/live/${username}/${password}/${stream_id}`;
+
+    // Append query parameters (e.g. timeshift, token)
+    const { search } = new URL(request.url);
+    if (search) {
+      redirectUrl += search;
+    }
 
     // 3. Redirect
     return NextResponse.redirect(redirectUrl);

@@ -33,6 +33,7 @@ export function middleware(request: NextRequest) {
           '/stalker_portal/',
           '/c/',
           '/live/',
+          '/timeshift/',
           '/movie/',
           '/series/',
           '/xmltv.php',

@@ -58,7 +58,13 @@ export async function GET(
     if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
 
     // 3. Construct Redirect URL
-    const redirectUrl = `${upstreamUrl}/series/${username}/${password}/${stream_id}`;
+    let redirectUrl = `${upstreamUrl}/series/${username}/${password}/${stream_id}`;
+
+    // Append query parameters
+    const { search } = new URL(request.url);
+    if (search) {
+      redirectUrl += search;
+    }
 
     // 4. Redirect
     return NextResponse.redirect(redirectUrl);
