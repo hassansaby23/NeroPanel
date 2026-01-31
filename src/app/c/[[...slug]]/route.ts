@@ -34,17 +34,29 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
     try {
         const config = await getActiveUpstreamServer();
         let upstreamUrl = config?.server_url || '';
+        
+        if (!upstreamUrl) {
+             return NextResponse.json({ error: "No upstream configured" }, { status: 500 });
+        }
+
+        // Force HTTPS
+        if (upstreamUrl.startsWith('http://')) {
+            upstreamUrl = upstreamUrl.replace('http://', 'https://');
+        }
+
         // Helper already handles trailing slash, but just in case
         if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
         
         // Construct upstream URL
         // Incoming: /c/version.js -> Upstream: /c/version.js
-        // Incoming: /c/xpcom.common.js -> Upstream: /c/xpcom.common.js
+        // Incoming: /c/server.php -> Upstream: /c/server.php
         
-        // Note: Our catch-all is at /c/[...slug], so "version.js" is slug[0]
-        const targetUrl = `${upstreamUrl}/c/${path}`;
+        const url = new URL(request.url);
+        const searchParams = url.searchParams.toString();
         
-        console.log(`[Static Proxy] Fetching: ${targetUrl}`);
+        const targetUrl = `${upstreamUrl}/c/${path}${searchParams ? '?' + searchParams : ''}`;
+        
+        console.log(`[Stalker Proxy] Forwarding: ${targetUrl}`);
 
         const method = request.method;
         let requestBody = null;
@@ -62,10 +74,15 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
             data: requestBody,
             responseType: 'arraybuffer', // Important for binary/text
             headers: {
-                'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0',
-                'Content-Type': request.headers.get('content-type') || 'application/octet-stream',
+                'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'Accept': '*/*',
+                'Referer': upstreamUrl,
+                'Origin': upstreamUrl,
+                'Host': new URL(upstreamUrl).host
             },
-            validateStatus: () => true
+            validateStatus: () => true,
+            maxRedirects: 5,
+            decompress: true
         });
 
         console.log(`[Static Proxy] Response: ${proxyRes.status}`);
