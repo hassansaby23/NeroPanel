@@ -18,7 +18,12 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
     // Handle root /c request - Redirect to server.php
     if (!slug || slug.length === 0) {
         const url = new URL(request.url);
-        return NextResponse.redirect(new URL('/c/server.php', url));
+        const searchParams = url.searchParams.toString();
+        const host = request.headers.get('host') || url.host;
+        const protocol = request.headers.get('x-forwarded-proto') || url.protocol.replace(':', '');
+        
+        const targetUrl = `${protocol}://${host}/c/server.php${searchParams ? '?' + searchParams : ''}`;
+        return NextResponse.redirect(targetUrl);
     }
 
     const path = slug.join('/');
