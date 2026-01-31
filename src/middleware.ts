@@ -30,14 +30,15 @@ export function middleware(request: NextRequest) {
       const allowedPaths = [
           '/player_api.php',
           '/portal.php',
-          '/stalker_portal/',
-          '/c/',
+          '/stalker_portal', // Removed trailing slash to match /stalker_portal
+          '/c',              // Removed trailing slash to match /c
           '/live/',
           '/timeshift/',
           '/movie/',
           '/series/',
           '/xmltv.php',
-          '/api/' // Some internal APIs might be needed, but be careful
+          '/api/',
+          '/get.php'
       ];
       
       const isAllowed = allowedPaths.some(p => path.startsWith(p));
