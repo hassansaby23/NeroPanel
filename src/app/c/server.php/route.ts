@@ -54,42 +54,12 @@ async function handleRequest(request: Request) {
   }
 
   if (!mac) {
-      // If request accepts HTML (browser), show a debug/login page
-      const acceptHeader = request.headers.get('accept') || '';
-      if (acceptHeader.includes('text/html')) {
-          return new NextResponse(`
-            <html>
-              <head>
-                <title>Stalker Portal Debug</title>
-                <style>
-                  body { font-family: system-ui, sans-serif; max-width: 500px; margin: 40px auto; padding: 20px; background: #f8fafc; }
-                  .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-                  input { width: 100%; padding: 8px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-                  button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
-                  button:hover { background: #1d4ed8; }
-                  h1 { margin-top: 0; font-size: 1.5rem; color: #0f172a; }
-                  p { color: #64748b; font-size: 0.875rem; }
-                </style>
-              </head>
-              <body>
-                <div class="card">
-                  <h1>Stalker Portal Debug</h1>
-                  <p>This endpoint requires a MAC address. Enter one below to test:</p>
-                  <form method="GET">
-                    <input type="text" name="mac" placeholder="00:1A:79:..." required pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$" />
-                    <button type="submit">Connect</button>
-                  </form>
-                </div>
-              </body>
-            </html>
-          `, { headers: { 'Content-Type': 'text/html' } });
-      }
-      
+      // Allow request without MAC if upstream allows it (or let upstream handle the error)
+      // Removed Stalker Debug Page as requested
       console.log("Missing MAC. Headers:", Object.fromEntries(request.headers));
-      return NextResponse.json({ type: "stb", error: "Missing MAC" }, { status: 400 });
   }
 
-  const cleanMac = mac.toUpperCase();
+  const cleanMac = mac ? mac.toUpperCase() : '';
   
   // 1. Get Upstream URL
   let upstreamConfig: any = null;
@@ -112,10 +82,10 @@ async function handleRequest(request: Request) {
     let headers: any = {};
 
     try {
-        // Simple transparent proxy: forward to upstream/c/server.php
+        // Simple transparent proxy: forward to upstream root (/) as requested
         // User requested to remove all "mag stuff" and fallback logic.
         
-        let targetUrl = `${upstreamUrl}/c/server.php?${searchParams.toString()}`;
+        let targetUrl = `${upstreamUrl}/?${searchParams.toString()}`;
         console.log(`[Stalker Proxy] Forwarding ${action} to ${targetUrl}`);
 
         const forwardHeaders: Record<string, string> = {
