@@ -74,10 +74,8 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
             data: requestBody,
             responseType: 'arraybuffer', // Important for binary/text
             headers: {
-                'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0',
                 'Accept': '*/*',
-                'Referer': upstreamUrl,
-                'Origin': upstreamUrl,
                 'Host': new URL(upstreamUrl).host
             },
             validateStatus: () => true,
