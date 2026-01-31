@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS local_content (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+
+
 -- create indexes
 CREATE INDEX IF NOT EXISTS idx_local_content_type ON local_content(content_type);
 CREATE INDEX IF NOT EXISTS idx_local_content_category ON local_content(category_id);

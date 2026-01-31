@@ -63,41 +63,88 @@ async function handleRequest(request: Request) {
 
   // Normalize MAC
   const cleanMac = mac.toUpperCase();
-  let device = { username: '', password: '', is_active: true, auth_mode: 'local' };
+  
+  // DIRECT PROXY MODE:
+  // Since the user is registered on the provider (upstream), we do NOT check local DB.
+  // We simply forward the Stalker Portal requests to the upstream /c/ endpoint.
+  let device = { username: '', password: '', is_active: true, auth_mode: 'proxy' };
 
+  // 2. Get Upstream URL
+  let upstreamUrl = '';
   try {
-    const deviceRes = await pool.query(
-      'SELECT username, password, is_active FROM mag_devices WHERE mac_address = $1',
-      [cleanMac]
-    );
-
-    if (deviceRes.rowCount === 0) {
-       // --- PROXY AUTHENTICATION FALLBACK ---
-       // If MAC not in DB, assume "Proxy Mode" (registered on upstream)
-       // We will try to fetch the upstream Stalker Portal directly?
-       // Actually, the prompt says "mag address already registered on the provider".
-       // This implies NeroPanel doesn't know the credentials, but the Provider knows the MAC.
-       
-       // BUT, NeroPanel uses Xtream Codes API (M3U) to fetch the playlist.
-       // Xtream Codes API generally DOES NOT support "Get Playlist by MAC" without a password.
-       // It supports User/Pass.
-       
-       // If the user has a MAG line on the provider, they usually have a Username/Password hidden in the background.
-       // OR the provider exposes a Stalker Portal at /c/.
-       
-       // Let's assume the user wants NeroPanel to act as a STALKER PROXY to the upstream.
-       // This is complex because we need to forward `handshake` to upstream `/c/`.
-       
-       // For now, let's allow "Guest" access if the upstream supports it, OR fail gracefully.
-       // But practically, NeroPanel MUST know the credentials to fetch the list via Xtream API.
-       
-       // Let's return a helpful error for now, because we cannot magically guess the credentials
-       // unless we implement full Stalker Proxying (forwarding requests to upstream /c/).
-       
-       // Let's implement basic Stalker Proxying for unknown MACs!
-       device.auth_mode = 'proxy';
+    const config = await getActiveUpstreamServer();
+    if (config) {
+      upstreamUrl = config.server_url;
+      // If we have credentials for the panel itself, we might use them?
+      // But here we want to proxy the MAC authentication.
     } else {
-        const row = deviceRes.rows[0];
+      console.warn('No active upstream server configured.');
+      return NextResponse.json({ type: "stb", error: "No Upstream Configured" }, { status: 503 });
+    }
+  } catch (err) {
+    console.error('DB Error', err);
+    return NextResponse.json({ error: 'Database Error' }, { status: 500 });
+  }
+
+  // --- PROXY HANDLER ---
+  // If auth_mode is proxy, we forward everything to the upstream Stalker Portal.
+  if (device.auth_mode === 'proxy') {
+      
+      // Construct the Upstream Portal URL
+      // If upstream is http://dns:port, the portal is http://dns:port/c/
+      // or http://dns:port/stalker_portal/server/load.php depending on server type.
+      // Usually Xtream UI /c/ maps to /c/server.php or similar.
+      
+      // Let's assume standard /c/server.php structure
+      let targetUrl = `${upstreamUrl}/c/server.php`;
+      
+      // If the request path was different (e.g. /stalker_portal/...), we might need to adjust.
+      // But usually /c/ is the entry point.
+      
+      // Forward all params
+      const params = Object.fromEntries(searchParams);
+      
+      // Forward Headers (Important for MAC/User-Agent/Cookies)
+      const headers: Record<string, string> = {};
+      if (request.headers.get('cookie')) headers['Cookie'] = request.headers.get('cookie')!;
+      if (request.headers.get('user-agent')) headers['User-Agent'] = request.headers.get('user-agent')!;
+      if (request.headers.get('authorization')) headers['Authorization'] = request.headers.get('authorization')!;
+      if (request.headers.get('x-forwarded-for')) headers['X-Forwarded-For'] = request.headers.get('x-forwarded-for')!;
+
+      console.log(`[Proxy] Forwarding ${action} to ${targetUrl} for MAC ${cleanMac}`);
+
+      try {
+          const response = await axios.get(targetUrl, {
+              params,
+              headers,
+              timeout: 15000, // 15s timeout
+              validateStatus: () => true // Accept all status codes
+          });
+
+          // Forward the response back to the client
+          const resHeaders = new Headers();
+          Object.entries(response.headers).forEach(([key, value]) => {
+              if (key.toLowerCase() !== 'content-length' && key.toLowerCase() !== 'transfer-encoding') {
+                  resHeaders.set(key, String(value));
+              }
+          });
+          
+          // Rewrite Location header if it's a redirect
+          if (resHeaders.has('location')) {
+             // We might need to rewrite it to point back to our proxy?
+             // Usually Stalker doesn't redirect much, but if it does, it might break.
+          }
+
+          return new NextResponse(JSON.stringify(response.data), {
+              status: response.status,
+              headers: resHeaders
+          });
+
+      } catch (error: any) {
+          console.error(`[Proxy] Error forwarding to ${targetUrl}:`, error.message);
+          return NextResponse.json({ error: 'Upstream Error' }, { status: 502 });
+      }
+  }
         if (!row.is_active) {
             return NextResponse.json({ type: "stb", error: "Your STB is blocked." }, { status: 403 });
         }
