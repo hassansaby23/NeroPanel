@@ -139,6 +139,9 @@ async function handleRequest(request: Request) {
         
         // Base target
         let targetUrl = `${upstreamUrl}/c/server.php?${searchParams.toString()}`;
+        if (upstreamUrl.endsWith('/c')) {
+            targetUrl = `${upstreamUrl}/server.php?${searchParams.toString()}`;
+        }
         console.log(`[Stalker Proxy] Processing ${action} for ${cleanMac} at ${targetUrl}`);
 
         const method = request.method;
