@@ -88,6 +88,9 @@ async function handleRequest(request: Request) {
         
         const cookie = request.headers.get('cookie');
         if (cookie) forwardHeaders['Cookie'] = cookie;
+
+        const authHeader = request.headers.get('authorization');
+        if (authHeader) forwardHeaders['Authorization'] = authHeader;
         
         // Base target
         let targetUrl = `${upstreamUrl}/c/server.php?${searchParams.toString()}`;
