@@ -59,6 +59,8 @@ async function handleRequest(request: Request) {
     const config = await getActiveUpstreamServer();
     if (config) {
       upstreamUrl = config.server_url;
+      // Do NOT strip trailing slash blindly, check if it looks like a path
+      // But for consistency, let's normalize it to NO trailing slash
       if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
     } else {
       console.warn('No active upstream server configured.');
@@ -72,10 +74,14 @@ async function handleRequest(request: Request) {
   // 2. Proxy Handler
   try {
         // Construct upstream URL
-        // Try paths: /c/server.php, then /portal.php, then /stalker_portal/server/load.php
+        // Try paths: 
+        // 1. /c/server.php (Standard Stalker)
+        // 2. /portal.php (Root Portal)
+        // 3. /c/portal.php (Subdir Portal - Common in Xtream UI)
+        // 4. /stalker_portal/server/load.php (Original Stalker)
         
         const forwardHeaders: any = {
-            'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0',
+            'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
             'X-Forwarded-For': '127.0.0.1', 
             'Accept': '*/*'
         };
@@ -85,7 +91,7 @@ async function handleRequest(request: Request) {
         
         // Base target
         let targetUrl = `${upstreamUrl}/c/server.php?${searchParams.toString()}`;
-        console.log(`[Stalker Proxy] Processing ${action} for ${cleanMac}`);
+        console.log(`[Stalker Proxy] Processing ${action} for ${cleanMac} at ${targetUrl}`);
 
         const method = request.method;
         let requestBody = null;
@@ -106,8 +112,8 @@ async function handleRequest(request: Request) {
         });
 
         // Retry logic for 404s
-        if (proxyRes.status === 404) {
-             console.log(`[Stalker Proxy] /c/server.php 404. Trying /portal.php`);
+        if (proxyRes.status === 404 || proxyRes.status === 520 || proxyRes.status === 403) {
+             console.log(`[Stalker Proxy] /c/server.php failed (${proxyRes.status}). Trying /portal.php`);
              targetUrl = `${upstreamUrl}/portal.php?${searchParams.toString()}`;
              proxyRes = await axios({
                 method: method,
@@ -118,8 +124,20 @@ async function handleRequest(request: Request) {
              });
         }
         
-        if (proxyRes.status === 404) {
-             console.log(`[Stalker Proxy] /portal.php 404. Trying /stalker_portal/server/load.php`);
+        if (proxyRes.status === 404 || proxyRes.status === 520 || proxyRes.status === 403) {
+             console.log(`[Stalker Proxy] /portal.php failed (${proxyRes.status}). Trying /c/portal.php`);
+             targetUrl = `${upstreamUrl}/c/portal.php?${searchParams.toString()}`;
+             proxyRes = await axios({
+                method: method,
+                url: targetUrl,
+                data: requestBody,
+                headers: forwardHeaders,
+                validateStatus: () => true
+             });
+        }
+
+        if (proxyRes.status === 404 || proxyRes.status === 520 || proxyRes.status === 403) {
+             console.log(`[Stalker Proxy] /c/portal.php failed (${proxyRes.status}). Trying /stalker_portal/server/load.php`);
              targetUrl = `${upstreamUrl}/stalker_portal/server/load.php?${searchParams.toString()}`;
              proxyRes = await axios({
                 method: method,
@@ -129,6 +147,8 @@ async function handleRequest(request: Request) {
                 validateStatus: () => true
              });
         }
+
+        console.log(`[Stalker Proxy] Final Response: ${proxyRes.status} from ${targetUrl}`);
 
         // Handle Response
         let responseBody = proxyRes.data;
