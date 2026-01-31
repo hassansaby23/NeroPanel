@@ -14,6 +14,14 @@ async function fetchXtream(url: string, params: any) {
   }
 }
 
+// Helper to ensure URLs are absolute
+function getAbsoluteUrl(url: string | null | undefined, baseUrl: string) {
+    if (!url) return "";
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return `${baseUrl}${url}`;
+    return url;
+}
+
 export async function GET(request: Request) {
   return handleRequest(request);
 }
@@ -24,6 +32,12 @@ export async function POST(request: Request) {
 
 async function handleRequest(request: Request) {
   const { searchParams } = new URL(request.url);
+
+  // Determine Base URL for Absolute URL generation
+  const hostHeader = request.headers.get('host') || 'localhost';
+  const protocolHeader = request.headers.get('x-forwarded-proto') || 'http';
+  const baseUrl = `${protocolHeader}://${hostHeader}`;
+
   const action = searchParams.get('action');
   
   // Try to find MAC in params, headers, or cookies
@@ -187,29 +201,62 @@ async function handleRequest(request: Request) {
         // Handle Response
         let responseBody = proxyRes.data;
 
-        // Optional: Filter hidden channels if it's get_ordered_list
+        // Optional: Filter hidden channels & Apply Overrides
         if (action === 'get_ordered_list' && responseBody?.js?.data) {
              try {
                  const [catOverridesRes, chOverridesRes] = await Promise.all([
                      pool.query("SELECT category_id FROM category_overrides WHERE is_hidden = true"),
-                     pool.query("SELECT stream_id, is_hidden FROM channel_overrides WHERE is_hidden = true")
+                     pool.query("SELECT stream_id, is_hidden, custom_name, logo_url FROM channel_overrides")
                  ]);
                  
                  const hiddenCats = new Set(catOverridesRes.rows.map(r => Number(r.category_id)));
-                 const hiddenChans = new Set(chOverridesRes.rows.map(r => Number(r.stream_id)));
                  
-                 const filteredData = responseBody.js.data.filter((ch: any) => {
-                     if (hiddenChans.has(Number(ch.id))) return false;
-                     // Note: Stalker categories are usually tv_genre_id
-                     if (ch.tv_genre_id && hiddenCats.has(Number(ch.tv_genre_id))) return false;
-                     return true;
+                 // Create Map for O(1) access
+                 const overrideMap = new Map();
+                 chOverridesRes.rows.forEach(r => {
+                     overrideMap.set(Number(r.stream_id), r);
                  });
+                 
+                 const filteredData = responseBody.js.data.reduce((acc: any[], ch: any) => {
+                     const cid = Number(ch.id);
+                     
+                     // 1. Check Hidden (Channel Level)
+                     if (overrideMap.has(cid) && overrideMap.get(cid).is_hidden) return acc;
+
+                     // 2. Check Hidden (Category Level)
+                     if (ch.tv_genre_id && hiddenCats.has(Number(ch.tv_genre_id))) return acc;
+                     
+                     // 3. Apply Custom Name & Logo
+                     let finalCh = { ...ch };
+                     const override = overrideMap.get(cid);
+
+                     if (override) {
+                         if (override.custom_name) {
+                             finalCh.name = override.custom_name;
+                         }
+                         if (override.logo_url) {
+                             // Custom logo from local DB -> make absolute to LOCAL server
+                             finalCh.logo = getAbsoluteUrl(override.logo_url, baseUrl);
+                         }
+                     }
+                     
+                     // 4. Handle Upstream Relative Logos (if no custom logo)
+                     // If existing logo is relative, it points to upstream.
+                     // We must make it absolute pointing to upstreamUrl so client can fetch it.
+                     if ((!override || !override.logo_url) && finalCh.logo && !finalCh.logo.startsWith('http')) {
+                         const sep = finalCh.logo.startsWith('/') ? '' : '/';
+                         finalCh.logo = `${upstreamUrl}${sep}${finalCh.logo}`;
+                     }
+                     
+                     acc.push(finalCh);
+                     return acc;
+                 }, []);
                  
                  responseBody.js.data = filteredData;
                  responseBody.js.total_items = filteredData.length;
                  responseBody.js.max_page_items = filteredData.length;
              } catch (e) {
-                 console.error("Error filtering channels:", e);
+                 console.error("Error processing channels:", e);
                  // Continue with original data if filtering fails
              }
         }
