@@ -83,7 +83,7 @@ export default function ChannelsPage() {
       if (!res.ok) throw new Error('Upload failed');
 
       const data = await res.json();
-      const fullUrl = `${window.location.protocol}//${window.location.host}${data.url}`;
+      const fullUrl = data.url;
       setEditForm(prev => ({ ...prev, logo_url: fullUrl }));
     } catch (err) {
       alert('Failed to upload logo');
@@ -100,7 +100,7 @@ export default function ChannelsPage() {
       
       // Construct URL based on EPG ID
       // Assuming user put logos in public/logos/EPG_ID.png
-      const epgLogoUrl = `${window.location.protocol}//${window.location.host}/logos/${editingChannel.epg_channel_id}.png`;
+      const epgLogoUrl = `/logos/${editingChannel.epg_channel_id}.png`;
       setEditForm(prev => ({ ...prev, logo_url: epgLogoUrl }));
   };
 
@@ -158,7 +158,7 @@ export default function ChannelsPage() {
           // Prepare bulk payload
           const updates = targetChannels.map(c => ({
               stream_id: c.stream_id,
-              logo_url: `${window.location.protocol}//${window.location.host}/logos/${c.epg_channel_id}.png`,
+              logo_url: `/logos/${c.epg_channel_id}.png`,
               // We preserve existing custom name if any, otherwise null (which means don't change it in DB upsert logic if we passed it correctly, 
               // BUT our bulk API expects specific values. 
               // Actually, our API logic: 

@@ -11,6 +11,14 @@ function getCacheKey(prefix: string, params: any) {
   return `${prefix}:${hash}`;
 }
 
+// Helper to ensure URLs are absolute
+function getAbsoluteUrl(url: string | null | undefined, baseUrl: string) {
+    if (!url) return "";
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return `${baseUrl}${url}`;
+    return url;
+}
+
 // Helper to fetch upstream content
 async function fetchUpstream(url: string, params: any) {
   // Check Cache for specific actions
@@ -89,6 +97,11 @@ export async function GET(request: Request) {
   const password = searchParams.get('password');
   const action = searchParams.get('action');
 
+  // Determine Base URL for Absolute URL generation
+  const hostHeader = request.headers.get('host') || 'localhost';
+  const protocolHeader = request.headers.get('x-forwarded-proto') || 'http';
+  const baseUrl = `${protocolHeader}://${hostHeader}`;
+
   if (!username || !password) {
     return NextResponse.json({ user_info: { auth: 0 }, error: 'Missing credentials' }, { status: 401 });
   }
@@ -163,7 +176,7 @@ export async function GET(request: Request) {
           name: row.name,
           stream_type: "movie",
           stream_id: customId,
-          stream_icon: row.stream_icon,
+          stream_icon: getAbsoluteUrl(row.stream_icon, baseUrl),
           rating: "5",
           added: "0",
           container_extension: "mp4",
@@ -207,7 +220,7 @@ export async function GET(request: Request) {
         num: 0,
         name: row.name,
         series_id: !isNaN(Number(row.stream_id)) ? Number(row.stream_id) : row.stream_id || `loc_${row.id}`, // Return Number if possible
-        cover: row.stream_icon,
+        cover: getAbsoluteUrl(row.stream_icon, baseUrl),
         plot: row.metadata?.description || "",
         cast: row.metadata?.cast || "",
         director: row.metadata?.director || "",
@@ -265,7 +278,7 @@ export async function GET(request: Request) {
 
                 acc.push({
                     ...item,
-                    stream_icon: override.logo_url || item.stream_icon,
+                    stream_icon: override.logo_url ? getAbsoluteUrl(override.logo_url, baseUrl) : item.stream_icon,
                     name: override.custom_name || item.name
                 });
             } else {
@@ -371,8 +384,8 @@ export async function GET(request: Request) {
                     tmdb_id: meta.tmdb_id || "",
                     name: row.title,
                     o_name: meta.o_name || row.title,
-                    cover_big: row.poster_url,
-                    movie_image: row.poster_url,
+                    cover_big: getAbsoluteUrl(row.poster_url, baseUrl),
+                    movie_image: getAbsoluteUrl(row.poster_url, baseUrl),
                     releasedate: meta.releasedate || "",
                     youtube_trailer: meta.youtube_trailer || "",
                     director: meta.director || "",
@@ -472,12 +485,12 @@ export async function GET(request: Request) {
                     id: s,
                     name: `Season ${s}`,
                     overview: "",
-                    poster_path: row.poster_url,
+                    poster_path: getAbsoluteUrl(row.poster_url, baseUrl),
                     season_number: s
                 })),
                 info: {
                     name: row.title,
-                    cover: row.poster_url,
+                    cover: getAbsoluteUrl(row.poster_url, baseUrl),
                     plot: row.description,
                     cast: row.metadata?.cast || "",
                     director: row.metadata?.director || "",
@@ -541,10 +554,6 @@ export async function GET(request: Request) {
   }
 
   // Default: Return Auth Info (Login success)
-  const hostHeader = request.headers.get('host') || 'localhost';
-  const protocolHeader = request.headers.get('x-forwarded-proto') || 'http';
-  
-  // Parse host and port
   let serverUrl = hostHeader;
   let serverPort = '80';
   let serverHttpsPort = '443';

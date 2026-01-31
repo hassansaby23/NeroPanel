@@ -78,7 +78,7 @@ export default function AddLocalContentPage() {
       if (!res.ok) throw new Error('Upload failed');
 
       const data = await res.json();
-      const fullUrl = `${window.location.protocol}//${window.location.host}${data.url}`;
+      const fullUrl = data.url;
       setFormData(prev => ({ ...prev, poster_url: fullUrl }));
     } catch (err) {
       console.error(err);
