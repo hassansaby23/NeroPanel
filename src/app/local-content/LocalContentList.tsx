@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from 'react';
-import { Film } from 'lucide-react';
+import { Film, Edit } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LocalContentList({ initialContent }: { initialContent: any[] }) {
   const router = useRouter();
@@ -54,11 +55,18 @@ export default function LocalContentList({ initialContent }: { initialContent: a
           <div className="p-4">
             <h3 className="font-semibold text-lg text-slate-900 truncate">{item.title}</h3>
             <p className="text-sm text-slate-500 mt-1 line-clamp-2">{item.description || 'No description'}</p>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-3 items-center">
+               <Link 
+                  href={`/local-content/edit/${item.id}`}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+               >
+                  <Edit className="w-4 h-4 mr-1" />
+                  Edit
+               </Link>
                <button 
                  onClick={() => handleDelete(item.id)}
                  disabled={deletingId === item.id}
-                 className="text-sm text-red-600 hover:underline disabled:opacity-50"
+                 className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
                >
                  {deletingId === item.id ? 'Deleting...' : 'Delete'}
                </button>
