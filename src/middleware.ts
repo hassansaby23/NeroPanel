@@ -42,9 +42,9 @@ export function middleware(request: NextRequest) {
       const isAllowed = allowedPaths.some(p => path.startsWith(p));
       
       // If they try to access the Dashboard (/) or other UI pages, show 404 or specific message
-      if (!isAllowed) {
-           return new NextResponse('Unauthorized', { status: 401 });
-      }
+      // if (!isAllowed) {
+      //      return new NextResponse('Unauthorized', { status: 401 });
+      // }
   }
 
   return NextResponse.next()
