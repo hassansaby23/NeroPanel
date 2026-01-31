@@ -32,8 +32,13 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
     // But let's proxy EVERYTHING we don't handle locally to the upstream.
     
     try {
-        const config = await getActiveUpstreamServer();
-        let upstreamUrl = config?.server_url || '';
+        // Allow overriding the upstream URL via environment variable for this specific route
+        let upstreamUrl = process.env.STALKER_PORTAL_URL;
+
+        if (!upstreamUrl) {
+            const config = await getActiveUpstreamServer();
+            upstreamUrl = config?.server_url || '';
+        }
         
         if (!upstreamUrl) {
              return NextResponse.json({ error: "No upstream configured" }, { status: 500 });
@@ -46,10 +51,6 @@ async function handleRequest(request: Request, params: Promise<{ slug?: string[]
 
         // Helper already handles trailing slash, but just in case
         if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
-        
-        // Construct upstream URL
-        // Incoming: /c/version.js -> Upstream: /c/version.js
-        // Incoming: /c/server.php -> Upstream: /c/server.php
         
         const url = new URL(request.url);
         const searchParams = url.searchParams.toString();
