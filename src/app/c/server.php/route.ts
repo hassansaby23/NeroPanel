@@ -240,23 +240,18 @@ async function handleRequest(request: Request) {
 
         // Fallback to Xtream Emulator if Upstream Stalker fails
         if (!success && upstreamConfig.username && upstreamConfig.password_hash) {
-            console.log(`[Stalker Proxy] All upstream paths failed. Falling back to Xtream Emulator.`);
             const fallbackBody = await handleFallback(action, upstreamUrl, upstreamConfig, searchParams);
             if (fallbackBody) {
                  responseBody = fallbackBody;
                  success = true;
-                 console.log("[Stalker Proxy] Fallback successful. Body keys:", Object.keys(fallbackBody));
-            } else {
-                 console.log("[Stalker Proxy] Fallback returned null/empty");
             }
         }
 
         if (!success && (!proxyRes || proxyRes.status === 520)) {
-             console.log("[Stalker Proxy] Returning 520 Upstream Error");
              return new NextResponse("Upstream Error", { status: 520 });
         }
         
-        if (!success) {
+        if (!success && proxyRes) {
             status = proxyRes.status;
             headers = proxyRes.headers;
             try {
