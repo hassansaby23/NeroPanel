@@ -35,7 +35,8 @@ export function middleware(request: NextRequest) {
           '/series/',
           '/xmltv.php',
           '/api/',
-          '/get.php'
+          '/get.php',
+          '/c/'
       ];
       
       const isAllowed = allowedPaths.some(p => path.startsWith(p));
