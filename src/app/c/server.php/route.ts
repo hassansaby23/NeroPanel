@@ -3,16 +3,7 @@ import pool from '@/lib/db';
 import axios from 'axios';
 import { getActiveUpstreamServer } from '@/lib/server_config';
 
-// Helper: Fetch Xtream API
-async function fetchXtream(url: string, params: any) {
-  try {
-    const response = await axios.get(url, { params, timeout: 30000 });
-    return response.data;
-  } catch (error) {
-    console.error('Xtream Fetch Error:', error);
-    return null;
-  }
-}
+
 
 // Helper to ensure URLs are absolute
 function getAbsoluteUrl(url: string | null | undefined, baseUrl: string) {
@@ -115,36 +106,30 @@ async function handleRequest(request: Request) {
 
   const upstreamUrl = upstreamConfig.server_url;
 
-  // 2. Proxy Handler
-  let responseBody: any = null;
-  let status = 200;
-  let headers: any = {};
+    // 2. Proxy Handler
+    let responseBody: any = null;
+    let status = 200;
+    let headers: any = {};
 
-  try {
-        // Construct upstream URL
-        // Try paths: 
-        // 1. /c/server.php (Standard Stalker)
-        // 2. /portal.php (Root Portal)
-        // 3. /c/portal.php (Subdir Portal - Common in Xtream UI)
-        // 4. /stalker_portal/server/load.php (Original Stalker)
+    try {
+        // Simple transparent proxy: forward to upstream/c/server.php
+        // User requested to remove all "mag stuff" and fallback logic.
         
-        const forwardHeaders: any = {
+        let targetUrl = `${upstreamUrl}/c/server.php?${searchParams.toString()}`;
+        console.log(`[Stalker Proxy] Forwarding ${action} to ${targetUrl}`);
+
+        const forwardHeaders: Record<string, string> = {
             'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-            'X-Forwarded-For': '127.0.0.1', 
-            'Accept': '*/*'
+            'Accept': '*/*',
+            'X-Forwarded-For': '127.0.0.1'
         };
-        
-        const cookie = request.headers.get('cookie');
-        if (cookie) forwardHeaders['Cookie'] = cookie;
 
+        // Forward Auth & Cookie
         const authHeader = request.headers.get('authorization');
         if (authHeader) forwardHeaders['Authorization'] = authHeader;
-        
-        // Prefer /portal.php if we are on root or if we had issues before
-        // Based on user logs, this server uses /portal.php
-        let targetUrl = `${upstreamUrl}/portal.php?${searchParams.toString()}`;
 
-        console.log(`[Stalker Proxy] Processing ${action} for ${cleanMac} at ${targetUrl}`);
+        const cookie = request.headers.get('cookie');
+        if (cookie) forwardHeaders['Cookie'] = cookie;
 
         const method = request.method;
         let requestBodyBuffer = null;
@@ -156,111 +141,30 @@ async function handleRequest(request: Request) {
             }
         }
 
-        // Clean headers significantly
-        const cleanHeaders: Record<string, string> = {};
-        cleanHeaders['User-Agent'] = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
-        if (searchParams.get('token')) {
-             cleanHeaders['Authorization'] = `Bearer ${searchParams.get('token')}`;
-        }
-        if (forwardHeaders['cookie']) {
-            cleanHeaders['Cookie'] = forwardHeaders['cookie'];
-        }
+        const proxyRes = await axios({
+            method: method,
+            url: targetUrl,
+            headers: forwardHeaders,
+            data: requestBodyBuffer,
+            responseType: 'arraybuffer',
+            validateStatus: () => true,
+            maxRedirects: 5,
+            decompress: true
+        });
 
-        let proxyRes;
-        let success = false;
+        status = proxyRes.status;
+        headers = proxyRes.headers;
         
-        // Attempt 1
         try {
-            proxyRes = await axios({
-                method: method,
-                url: targetUrl,
-                headers: cleanHeaders, 
-                data: requestBodyBuffer,
-                responseType: 'arraybuffer',
-                validateStatus: () => true,
-                maxRedirects: 5,
-                decompress: true 
-            });
-            
-            if (proxyRes.status === 200) success = true;
-            else console.log(`[Stalker Proxy] ${targetUrl} failed (${proxyRes.status})`);
-
-        } catch (error) {
-            console.error(`[Stalker Proxy] Request failed: ${error}`);
+            const rawData = proxyRes.data.toString();
+            responseBody = JSON.parse(rawData);
+        } catch(e) {
+            // Not JSON or empty
+            responseBody = proxyRes.data;
         }
 
-        // Retry logic for 404/520/403
-        if (!success) {
-             console.log(`[Stalker Proxy] Retrying with /c/server.php`);
-             targetUrl = `${upstreamUrl}/c/server.php?${searchParams.toString()}`;
-             try {
-                proxyRes = await axios({
-                    method: method,
-                    url: targetUrl,
-                    data: requestBodyBuffer,
-                    headers: cleanHeaders,
-                    validateStatus: () => true
-                });
-                if (proxyRes.status === 200) success = true;
-                else console.log(`[Stalker Proxy] ${targetUrl} failed (${proxyRes.status})`);
-             } catch(e) { console.error(e); }
-        }
-        
-        if (!success) {
-             console.log(`[Stalker Proxy] Retrying with /c/portal.php`);
-             targetUrl = `${upstreamUrl}/c/portal.php?${searchParams.toString()}`;
-             try {
-                proxyRes = await axios({
-                    method: method,
-                    url: targetUrl,
-                    data: requestBodyBuffer,
-                    headers: cleanHeaders,
-                    validateStatus: () => true
-                });
-                if (proxyRes.status === 200) success = true;
-                else console.log(`[Stalker Proxy] ${targetUrl} failed (${proxyRes.status})`);
-             } catch(e) { console.error(e); }
-        }
-
-        if (!success) {
-             console.log(`[Stalker Proxy] Retrying with /stalker_portal/server/load.php`);
-             targetUrl = `${upstreamUrl}/stalker_portal/server/load.php?${searchParams.toString()}`;
-             try {
-                proxyRes = await axios({
-                    method: method,
-                    url: targetUrl,
-                    data: requestBodyBuffer,
-                    headers: cleanHeaders,
-                    validateStatus: () => true
-                });
-                if (proxyRes.status === 200) success = true;
-                else console.log(`[Stalker Proxy] ${targetUrl} failed (${proxyRes.status})`);
-             } catch(e) { console.error(e); }
-        }
-
-        // Fallback to Xtream Emulator if Upstream Stalker fails
-        if (!success && upstreamConfig.username && upstreamConfig.password_hash) {
-            const fallbackBody = await handleFallback(action, upstreamUrl, upstreamConfig, searchParams);
-            if (fallbackBody) {
-                 responseBody = fallbackBody;
-                 success = true;
-            }
-        }
-
-        if (!success && (!proxyRes || proxyRes.status === 520)) {
-             return new NextResponse("Upstream Error", { status: 520 });
-        }
-        
-        if (!success && proxyRes) {
-            status = proxyRes.status;
-            headers = proxyRes.headers;
-            try {
-                const rawData = proxyRes.data.toString();
-                responseBody = JSON.parse(rawData);
-            } catch(e) {
-                // Maybe not JSON?
-                responseBody = proxyRes.data; // Keep as buffer/string
-            }
+        if (status >= 400) {
+            console.log(`[Stalker Proxy] Upstream returned ${status}`);
         }
 
   } catch (err: any) {
@@ -346,48 +250,4 @@ async function handleRequest(request: Request) {
   }
 }
 
-// Fallback Function
-async function handleFallback(action: string | null, upstreamUrl: string, config: any, searchParams: URLSearchParams) {
-    console.log("Using Xtream Fallback for action:", action);
-    
-    if (action === 'handshake') {
-        return { js: { token: 'mock_token_' + Date.now() } };
-    }
-    
-    if (action === 'get_profile') {
-        return { js: { id: 1, name: "User", login: "user", lang: "en" } };
-    }
 
-    if (action === 'get_genres') {
-         const url = `${upstreamUrl}/player_api.php?username=${config.username}&password=${config.password_hash}&action=get_live_categories`;
-         const data = await fetchXtream(url, {});
-         if (!Array.isArray(data)) return { js: [] };
-         
-         const genres = data.map((c: any) => ({
-             id: Number(c.category_id),
-             title: c.category_name,
-             alias: c.category_name
-         }));
-         return { js: genres };
-    }
-
-    if (action === 'get_ordered_list') {
-         const url = `${upstreamUrl}/player_api.php?username=${config.username}&password=${config.password_hash}&action=get_live_streams`;
-         const data = await fetchXtream(url, {});
-         if (!Array.isArray(data)) return { js: { data: [], total_items: 0 } };
-         
-         const streams = data.map((s: any) => ({
-             id: Number(s.stream_id),
-             name: s.name,
-             tv_genre_id: Number(s.category_id),
-             logo: s.stream_icon,
-             cmd: `ffmpeg ${upstreamUrl}/live/${config.username}/${config.password_hash}/${s.stream_id}.ts`
-         }));
-         
-         // Return raw object so the main function can process overrides
-         return { js: { data: streams, total_items: streams.length, max_page_items: streams.length } };
-    }
-    
-    // Default empty
-    return { js: {} };
-}
