@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
   const panelDomain = process.env.NEXT_PUBLIC_PANEL_DOMAIN;
 
   // 2. Logic: If the request comes from the "DNS" domain (streaming), 
-  // it should ONLY access /player_api.php, /c/, /xmltv.php, or /live /movie /series
+  // it should ONLY access /player_api.php, /xmltv.php, or /live /movie /series
   // It should NOT be able to see the Dashboard UI.
   
   // We check if the hostname matches the Panel Domain.
@@ -29,9 +29,6 @@ export function middleware(request: NextRequest) {
       // Allowed paths for the DNS/Streaming host
       const allowedPaths = [
           '/player_api.php',
-          '/portal.php',
-          '/stalker_portal', // Removed trailing slash to match /stalker_portal
-          '/c',              // Removed trailing slash to match /c
           '/live/',
           '/timeshift/',
           '/movie/',
