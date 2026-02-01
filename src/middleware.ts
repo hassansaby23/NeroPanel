@@ -2,49 +2,37 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  const url = request.nextUrl.clone()
-  const hostname = request.headers.get('host') || ''
-  
-  // 1. Define the DNS/Host domain (from env or hardcoded logic)
-  // Ideally this comes from ENV, but we can detect based on subdomains if needed.
-  // For now, let's assume anything NOT the panel domain should be restricted.
-  
-  // If you set NEXT_PUBLIC_PANEL_DOMAIN in your env, we can use it.
-  // Example: panel.yourdomain.com
-  const panelDomain = process.env.NEXT_PUBLIC_PANEL_DOMAIN;
+  const nextUrl = request.nextUrl;
+  console.log(`[Middleware] Request: ${request.method} ${nextUrl.pathname}`);
 
-  // 2. Logic: If the request comes from the "DNS" domain (streaming), 
-  // it should ONLY access /player_api.php, /xmltv.php, or /live /movie /series
-  // It should NOT be able to see the Dashboard UI.
-  
-  // We check if the hostname matches the Panel Domain.
-  // If panelDomain is set, and the current host is DIFFERENT, assume it's the DNS host.
-  // IMPORTANT: We strip the port number if present (e.g. localhost:3000 -> localhost)
-  const currentHost = hostname.split(':')[0];
-  const configPanelHost = panelDomain ? panelDomain.split(':')[0] : '';
+  // Skip middleware for static files and Next.js internals
+  if (
+    nextUrl.pathname.startsWith('/_next') ||
+    nextUrl.pathname.startsWith('/static') ||
+    nextUrl.pathname.startsWith('/api/auth') ||
+    nextUrl.pathname === '/favicon.ico'
+  ) {
+    return NextResponse.next();
+  }
 
-  if (configPanelHost && currentHost !== configPanelHost && !currentHost.includes('localhost')) {
-      const path = url.pathname;
-      
-      // Allowed paths for the DNS/Streaming host
-      const allowedPaths = [
-          '/player_api.php',
-          '/live/',
-          '/timeshift/',
-          '/movie/',
-          '/series/',
-          '/xmltv.php',
-          '/api/',
-          '/get.php',
-          '/c'
-      ];
-      
-      const isAllowed = allowedPaths.some(p => path.startsWith(p));
-      
-      // If they try to access the Dashboard (/) or other UI pages, show 404 or specific message
-      if (!isAllowed) {
-           return new NextResponse('Unauthorized', { status: 401 });
-      }
+  // Allow specific paths without authentication
+  const allowedPaths = [
+    '/player_api.php',
+    '/live/',
+    '/timeshift/',
+    '/movie/',
+    '/series/',
+    '/xmltv.php',
+    '/api/',
+    '/get.php',
+    '/c',
+    '/portal.php',
+    '/test-portal'
+  ];
+
+  if (allowedPaths.some(path => nextUrl.pathname.startsWith(path))) {
+    console.log(`[Middleware] Allowing: ${nextUrl.pathname}`);
+    return NextResponse.next();
   }
 
   return NextResponse.next()

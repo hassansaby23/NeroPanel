@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // trailingSlash: true, // Disabled to prevent conflicts with rewrites
   async rewrites() {
     return [
       {
@@ -9,8 +10,8 @@ const nextConfig: NextConfig = {
         destination: "/api/player_api.php",
       },
       {
-        source: "/c/:path*",
-        destination: "http://line.diatunnel.ink/c/:path*",
+        source: "/portal.php",
+        destination: "/api/portal",
       },
     ];
   },
