@@ -450,7 +450,7 @@ async function modifyVodList(data: any, request: NextRequest) {
 
 async function handleLocalVodList(category: string, request: NextRequest) {
     try {
-        let content = [];
+        let content: any[] = [];
         if (category === 'local_vod_all') {
              content = await fetchLocalVodContent(request);
         } else if (category.startsWith('local_cat_')) {
