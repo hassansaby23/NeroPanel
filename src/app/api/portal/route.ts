@@ -392,7 +392,7 @@ async function modifyVodGenres(data: any) {
         });
 
         // Optionally add categories from DB
-        const res = await pool.query('SELECT DISTINCT category_name FROM local_content WHERE content_type = $1', ['movie']);
+        const res = await pool.query('SELECT DISTINCT category_name FROM local_content WHERE content_type IN ($1, $2)', ['movie', 'series']);
         res.rows.forEach((row) => {
              if (row.category_name) {
                  // Encode category name in ID to allow stateless filtering later
@@ -486,49 +486,103 @@ async function fetchLocalVodContent(request: NextRequest, categoryName?: string)
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const baseUrl = `${protocol}://${host}`;
 
-    let query = 'SELECT * FROM local_content WHERE content_type = $1';
-    const params: any[] = ['movie'];
+    // 1. Fetch Movies
+    let movieQuery = 'SELECT id, title, stream_id, poster_url, created_at, stream_url FROM local_content WHERE content_type = $1';
+    const movieParams: any[] = ['movie'];
     
     if (categoryName) {
-        query += ' AND category_name = $2';
-        params.push(categoryName);
+        movieQuery += ' AND category_name = $2';
+        movieParams.push(categoryName);
     }
     
-    query += ' ORDER BY created_at DESC';
-
-    const res = await pool.query(query, params);
+    // 2. Fetch Episodes (Series)
+    // We need to join with local_content to get the Series info (like Category) if we filter by category
+    let seriesQuery = `
+        SELECT 
+            e.id, 
+            c.title as series_title, 
+            e.season_num, 
+            e.episode_num, 
+            e.stream_id, 
+            c.poster_url, 
+            e.created_at, 
+            e.stream_url 
+        FROM local_episodes e
+        JOIN local_content c ON e.series_id = c.id
+        WHERE c.content_type = 'series'
+    `;
     
-    return res.rows.map(row => {
-        // Construct stream URL
-        // If row.stream_url is absolute, use it.
-        // If relative, prepend baseUrl.
+    const seriesParams: any[] = [];
+    
+    if (categoryName) {
+        seriesQuery += ' AND c.category_name = $1';
+        seriesParams.push(categoryName);
+    }
+
+    const [moviesRes, seriesRes] = await Promise.all([
+        pool.query(movieQuery + ' ORDER BY created_at DESC', movieParams),
+        pool.query(seriesQuery + ' ORDER BY e.created_at DESC', seriesParams)
+    ]);
+
+    const items: any[] = [];
+
+    // Process Movies
+    moviesRes.rows.forEach(row => {
         let streamUrl = row.stream_url;
         if (streamUrl.startsWith('/')) {
             streamUrl = `${baseUrl}${streamUrl}`;
         }
-        
-        return {
-            id: Number(row.stream_id) || Math.floor(Math.random() * 100000000), // Ensure numeric ID
+        items.push({
+            id: Number(row.stream_id) || Math.floor(Math.random() * 100000000),
             name: row.title,
-            cmd: `local:${row.stream_id}`, // Magic command for our interceptor
+            cmd: `local:${row.stream_id}`,
             screenshot_uri: row.poster_url,
             added: row.created_at,
-            hd: 1 // Assume HD
-        };
+            hd: 1
+        });
     });
+
+    // Process Episodes
+    seriesRes.rows.forEach(row => {
+        let streamUrl = row.stream_url;
+        if (streamUrl.startsWith('/')) {
+            streamUrl = `${baseUrl}${streamUrl}`;
+        }
+        items.push({
+            id: Number(row.stream_id) || Math.floor(Math.random() * 100000000),
+            name: `${row.series_title} - S${row.season_num} E${row.episode_num}`,
+            cmd: `local:${row.stream_id}`,
+            screenshot_uri: row.poster_url,
+            added: row.created_at,
+            hd: 1
+        });
+    });
+    
+    return items;
 }
 
 async function handleLocalCreateLink(cmd: string, request: NextRequest) {
     try {
         const streamId = cmd.replace('local:', '');
         
-        const res = await pool.query('SELECT stream_url FROM local_content WHERE stream_id = $1', [streamId]);
+        // Check Movies
+        const movieRes = await pool.query('SELECT stream_url FROM local_content WHERE stream_id = $1', [streamId]);
         
-        if (res.rowCount === 0) {
+        let streamUrl = null;
+        if ((movieRes.rowCount ?? 0) > 0) {
+             streamUrl = movieRes.rows[0].stream_url;
+        } else {
+             // Check Episodes
+             const epRes = await pool.query('SELECT stream_url FROM local_episodes WHERE stream_id = $1', [streamId]);
+             if ((epRes.rowCount ?? 0) > 0) {
+                 streamUrl = epRes.rows[0].stream_url;
+             }
+        }
+
+        if (!streamUrl) {
             return NextResponse.json({ error: 'Content not found' }, { status: 404 });
         }
         
-        let streamUrl = res.rows[0].stream_url;
         const host = request.headers.get('host') || 'localhost';
         const protocol = request.headers.get('x-forwarded-proto') || 'http';
         const baseUrl = `${protocol}://${host}`;
