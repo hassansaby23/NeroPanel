@@ -35,6 +35,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // MAG Device Handling:
+  // If a MAG device requests the root path (GET or POST), rewrite it to the portal proxy.
+  // This prevents "Failed to find Server Action" errors when devices POST to /
+  const userAgent = request.headers.get('user-agent') || '';
+  const isMagDevice = /MAG[0-9]+|QtEmbedded|SmartLabs|STB|Infomir/i.test(userAgent);
+  
+  if (isMagDevice && nextUrl.pathname === '/') {
+      console.log(`[Middleware] MAG device detected on root. Rewriting to /api/portal`);
+      return NextResponse.rewrite(new URL('/api/portal', request.url));
+  }
+
   return NextResponse.next()
 }
 
