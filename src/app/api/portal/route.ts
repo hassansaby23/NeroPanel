@@ -239,11 +239,11 @@ async function modifyChannels(data: any, request: NextRequest) {
 
         // Scan available local logos
         const logosDir = path.join(process.cwd(), 'public', 'logos');
-        const availableLogos = new Set<string>();
+        const availableLogos = new Map<string, string>(); // Lowercase filename -> Actual filename
         try {
             if (fs.existsSync(logosDir)) {
                 const files = fs.readdirSync(logosDir);
-                files.forEach(f => availableLogos.add(f));
+                files.forEach(f => availableLogos.set(f.toLowerCase(), f));
             }
         } catch (e) {
             console.error('[ProxyRoot] Error reading logos dir:', e);
@@ -286,9 +286,11 @@ async function modifyChannels(data: any, request: NextRequest) {
              // 3. Fallback: Check for local logo by xmltv_id (server.py logic)
              if ((!override || !override.logo_url) && (ch.xmltv_id || ch.tvg_id)) {
                  const xmltvId = ch.xmltv_id || ch.tvg_id;
-                 const logoFilename = `${xmltvId}.png`;
-                 if (availableLogos.has(logoFilename)) {
-                      ch.logo = `${baseUrl}/logos/${logoFilename}`;
+                 const targetFilename = `${xmltvId}.png`.toLowerCase();
+                 
+                 if (availableLogos.has(targetFilename)) {
+                      const actualFilename = availableLogos.get(targetFilename);
+                      ch.logo = `${baseUrl}/logos/${actualFilename}`;
                  }
              }
              
