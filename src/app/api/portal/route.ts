@@ -24,6 +24,30 @@ async function handleProxy(request: NextRequest) {
 
   console.log(`[ProxyRoot] ${request.method} ${request.nextUrl.pathname} -> ${targetUrl}`);
 
+  // --- Pre-check: Local Actions ---
+  const action = request.nextUrl.searchParams.get('action');
+
+  // 1. Intercept create_link for local content
+  if (action === 'create_link') {
+      const cmd = request.nextUrl.searchParams.get('cmd');
+      if (cmd && cmd.startsWith('local:')) {
+          console.log(`[ProxyRoot] Handling local create_link: ${cmd}`);
+          return handleLocalCreateLink(cmd, request);
+      }
+  }
+
+  // 2. Intercept get_ordered_list for local-only categories
+  if (action === 'get_ordered_list') {
+      const type = request.nextUrl.searchParams.get('type');
+      const category = request.nextUrl.searchParams.get('category');
+      if (type === 'vod' && category && category.startsWith('local_')) {
+          console.log(`[ProxyRoot] Handling local vod list for category: ${category}`);
+          return handleLocalVodList(category, request);
+      }
+  }
+
+  // --- Standard Proxy Setup ---
+
   // 1. Prepare Request Headers
   const requestHeaders: Record<string, string> = {};
   request.headers.forEach((value, key) => {
@@ -62,9 +86,8 @@ async function handleProxy(request: NextRequest) {
   // Debug: Log Outgoing Headers
   console.log('[ProxyRoot] Outgoing Headers:', JSON.stringify(requestHeaders, null, 2));
 
-  // 2. Intercept and Modify Specific Actions
-  const action = request.nextUrl.searchParams.get('action');
-  const interceptActions = ['get_all_channels', 'get_ordered_list', 'get_genres'];
+  // 3. Intercept and Modify Specific Actions
+  const interceptActions = ['get_all_channels', 'get_ordered_list', 'get_genres', 'get_vod_genres', 'get_vod_categories'];
 
   if (action && interceptActions.includes(action)) {
       try {
@@ -87,10 +110,19 @@ async function handleProxy(request: NextRequest) {
               let data = response.data;
 
               // Apply modifications
-              if (action === 'get_all_channels' || action === 'get_ordered_list') {
+              if (action === 'get_all_channels') {
                   data = await modifyChannels(data, request);
               } else if (action === 'get_genres') {
                   data = await modifyGenres(data);
+              } else if (action === 'get_vod_genres' || action === 'get_vod_categories') {
+                  data = await modifyVodGenres(data);
+              } else if (action === 'get_ordered_list') {
+                   const type = request.nextUrl.searchParams.get('type');
+                   if (type === 'vod') {
+                       data = await modifyVodList(data, request);
+                   } else {
+                       data = await modifyChannels(data, request);
+                   }
               }
 
               // Return modified JSON
@@ -102,7 +134,7 @@ async function handleProxy(request: NextRequest) {
       }
   }
 
-  // 3. Standard Proxy Logic (Stream/Binary/Pass-through)
+  // 4. Standard Proxy Logic (Stream/Binary/Pass-through)
   try {
     const response = await axios({
       method: request.method,
@@ -341,5 +373,180 @@ async function modifyGenres(data: any) {
     } catch (e: any) {
         console.error('[ProxyRoot] Error modifying genres:', e);
         return data;
+    }
+}
+
+// --- VOD Handlers ---
+
+async function modifyVodGenres(data: any) {
+    try {
+        const genres = data?.js?.data || data?.js || [];
+        if (!Array.isArray(genres)) return data;
+
+        // Add Local Content Category
+        genres.push({
+            id: 'local_vod_all',
+            title: 'Local Content',
+            alias: 'Local Content',
+            censored: 0
+        });
+
+        // Optionally add categories from DB
+        const res = await pool.query('SELECT DISTINCT category_name FROM local_content WHERE content_type = $1', ['movie']);
+        res.rows.forEach((row) => {
+             if (row.category_name) {
+                 // Encode category name in ID to allow stateless filtering later
+                 const safeId = `local_cat_${Buffer.from(row.category_name).toString('hex')}`;
+                 genres.push({
+                     id: safeId,
+                     title: `Local - ${row.category_name}`,
+                     alias: `Local - ${row.category_name}`,
+                     censored: 0
+                 });
+             }
+        });
+
+        if (data.js && data.js.data) {
+            data.js.data = genres;
+        } else if (data.js) {
+            data.js = genres;
+        }
+        return data;
+    } catch (e) {
+        console.error('[ProxyRoot] Error modifying VOD genres:', e);
+        return data;
+    }
+}
+
+async function modifyVodList(data: any, request: NextRequest) {
+    try {
+        const list = data?.js?.data || [];
+        
+        // If the request was for ALL, we append.
+        // If the request was for specific upstream category, we leave it (unless we want to mix).
+        // Here we just append all local content to the list if the list is not empty or if it's the "All" category.
+        
+        // Note: The caller handles "local-only" categories via handleLocalVodList. 
+        // This function intercepts the upstream response, so it's for "All" or "Upstream Category".
+        
+        // Let's just append local content if the list exists (e.g. "All Movies").
+        // Or check if the category param is missing or '*'
+        const category = request.nextUrl.searchParams.get('category');
+        if (!category || category === '*' || category === '0') {
+             const localContent = await fetchLocalVodContent(request);
+             // Merge
+             data.js.data = [...list, ...localContent];
+             if (data.js.total_items) {
+                 data.js.total_items += localContent.length;
+             }
+        }
+
+        return data;
+    } catch (e) {
+        console.error('[ProxyRoot] Error modifying VOD list:', e);
+        return data;
+    }
+}
+
+async function handleLocalVodList(category: string, request: NextRequest) {
+    try {
+        let content = [];
+        if (category === 'local_vod_all') {
+             content = await fetchLocalVodContent(request);
+        } else if (category.startsWith('local_cat_')) {
+             const hexName = category.replace('local_cat_', '');
+             try {
+                 const categoryName = Buffer.from(hexName, 'hex').toString('utf-8');
+                 content = await fetchLocalVodContent(request, categoryName);
+             } catch (e) {
+                 console.error('[ProxyRoot] Error decoding category name:', e);
+                 content = await fetchLocalVodContent(request); // Fallback to all
+             }
+        }
+        
+        const responseData = {
+            js: {
+                total_items: content.length,
+                max_page_items: content.length,
+                selected_item: 0,
+                cur_page: 1,
+                data: content
+            }
+        };
+        
+        return NextResponse.json(responseData);
+    } catch (e: any) {
+        console.error('[ProxyRoot] Error handling local VOD list:', e);
+        return NextResponse.json({ js: { data: [] } });
+    }
+}
+
+async function fetchLocalVodContent(request: NextRequest, categoryName?: string) {
+    const host = request.headers.get('host') || 'localhost';
+    const protocol = request.headers.get('x-forwarded-proto') || 'http';
+    const baseUrl = `${protocol}://${host}`;
+
+    let query = 'SELECT * FROM local_content WHERE content_type = $1';
+    const params: any[] = ['movie'];
+    
+    if (categoryName) {
+        query += ' AND category_name = $2';
+        params.push(categoryName);
+    }
+    
+    query += ' ORDER BY created_at DESC';
+
+    const res = await pool.query(query, params);
+    
+    return res.rows.map(row => {
+        // Construct stream URL
+        // If row.stream_url is absolute, use it.
+        // If relative, prepend baseUrl.
+        let streamUrl = row.stream_url;
+        if (streamUrl.startsWith('/')) {
+            streamUrl = `${baseUrl}${streamUrl}`;
+        }
+        
+        return {
+            id: Number(row.stream_id) || Math.floor(Math.random() * 100000000), // Ensure numeric ID
+            name: row.title,
+            cmd: `local:${row.stream_id}`, // Magic command for our interceptor
+            screenshot_uri: row.poster_url,
+            added: row.created_at,
+            hd: 1 // Assume HD
+        };
+    });
+}
+
+async function handleLocalCreateLink(cmd: string, request: NextRequest) {
+    try {
+        const streamId = cmd.replace('local:', '');
+        
+        const res = await pool.query('SELECT stream_url FROM local_content WHERE stream_id = $1', [streamId]);
+        
+        if (res.rowCount === 0) {
+            return NextResponse.json({ error: 'Content not found' }, { status: 404 });
+        }
+        
+        let streamUrl = res.rows[0].stream_url;
+        const host = request.headers.get('host') || 'localhost';
+        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const baseUrl = `${protocol}://${host}`;
+
+        if (streamUrl.startsWith('/')) {
+            streamUrl = `${baseUrl}${streamUrl}`;
+        }
+        
+        console.log(`[ProxyRoot] Resolved local content ${streamId} to ${streamUrl}`);
+
+        return NextResponse.json({
+            js: {
+                cmd: streamUrl, // The device should play this URL
+                type: 'vod'
+            }
+        });
+    } catch (e: any) {
+        console.error('[ProxyRoot] Error creating local link:', e);
+        return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
     }
 }
