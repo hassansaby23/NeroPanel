@@ -30,6 +30,7 @@ services:
       - DATABASE_URL=postgresql://neropanel:${DB_PASSWORD}@postgres:5432/neropanel
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY}
       - REDIS_URL=redis://redis:6379
     depends_on:
       postgres:
