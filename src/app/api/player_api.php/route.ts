@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import httpClient from '@/lib/http_client';
-import { curlRequest } from '@/lib/curl';
 import redis from '@/lib/redis';
 import crypto from 'crypto';
 import { getUpstreamForClient } from '@/lib/upstream_balancer';
