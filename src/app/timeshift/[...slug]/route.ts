@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getActiveUpstreamServer } from '@/lib/server_config';
+import { getUpstreamForClient } from '@/lib/upstream_balancer';
 
 interface Props {
   params: Promise<{
@@ -15,25 +15,17 @@ export async function GET(
   const { slug } = params;
 
   try {
-    // 1. Get Upstream URL (Cached)
-    const config = await getActiveUpstreamServer();
-
-    if (!config) {
-      return new NextResponse('No active upstream server', { status: 503 });
-    }
+    // 1. Get Upstream URL (Rotated)
+    const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+    let upstreamUrl = getUpstreamForClient(clientIp);
+    if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
 
     // 2. Construct Redirect URL
     // Standard Xtream: http://server:port/timeshift/user/pass/duration/start/id.ts
     // We join the slug array to reconstruct the path
     const path = slug.join('/');
-    
-    // Ensure the upstream URL doesn't have a trailing slash
-    let serverUrl = config.server_url;
-    if (serverUrl.endsWith('/')) {
-        serverUrl = serverUrl.slice(0, -1);
-    }
 
-    const redirectUrl = `${serverUrl}/timeshift/${path}`;
+    const redirectUrl = `${upstreamUrl}/timeshift/${path}`;
     
     // Preserve query parameters if any (though usually not used for timeshift stream URLs)
     const { search } = new URL(request.url);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { getUpstreamForClient } from '@/lib/upstream_balancer';
 
 interface Props {
   params: Promise<{
@@ -45,16 +46,9 @@ export async function GET(
         }
     }
 
-    // 2. Get Upstream URL
-    const serverRes = await pool.query(
-      'SELECT server_url FROM upstream_servers WHERE is_active = true LIMIT 1'
-    );
-
-    if (!serverRes.rowCount || serverRes.rowCount === 0) {
-      return new NextResponse('No active upstream server', { status: 503 });
-    }
-
-    let upstreamUrl = serverRes.rows[0].server_url;
+    // 2. Get Upstream URL (Rotated)
+    const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+    let upstreamUrl = getUpstreamForClient(clientIp);
     if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
 
     // 3. Construct Redirect URL

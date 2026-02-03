@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
-import { getActiveUpstreamServer } from '@/lib/server_config';
+import { getUpstreamForClient } from '@/lib/upstream_balancer';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -12,12 +12,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const config = await getActiveUpstreamServer();
-    if (!config) {
-      return new NextResponse('No upstream server configured', { status: 503 });
-    }
-
-    let upstreamUrl = config.server_url;
+    const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+    let upstreamUrl = getUpstreamForClient(clientIp);
     if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
 
     console.log(`[XMLTV] Fetching EPG from ${upstreamUrl}/xmltv.php`);

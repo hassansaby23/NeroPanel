@@ -3,11 +3,9 @@ import axios from 'axios';
 import pool from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
+import { getUpstreamForClient, getUpstreamHost } from '@/lib/upstream_balancer';
 
 export const dynamic = 'force-dynamic';
-
-const UPSTREAM_HOST = 'line.diatunnel.ink';
-const UPSTREAM_ROOT = `http://${UPSTREAM_HOST}`;
 
 export async function GET(request: NextRequest) {
   return handleProxy(request);
@@ -18,10 +16,16 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleProxy(request: NextRequest) {
+  // Determine Client IP for Sticky Session
+  const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+  const UPSTREAM_ROOT = getUpstreamForClient(clientIp);
+  const UPSTREAM_HOST = getUpstreamHost(UPSTREAM_ROOT);
+
   const queryString = request.nextUrl.search;
   // Always proxy to /portal.php on upstream
   const targetUrl = `${UPSTREAM_ROOT}/portal.php${queryString}`;
 
+  console.log(`[ProxyRoot] Client: ${clientIp} -> Assigned Provider: ${UPSTREAM_ROOT}`);
   console.log(`[ProxyRoot] ${request.method} ${request.nextUrl.pathname} -> ${targetUrl}`);
 
   // --- Pre-check: Local Actions ---

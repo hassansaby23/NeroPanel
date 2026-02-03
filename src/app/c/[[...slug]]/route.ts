@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
+import { getUpstreamForClient, getUpstreamHost } from '@/lib/upstream_balancer';
 
 export const dynamic = 'force-dynamic';
 
-const UPSTREAM_HOST = 'line.diatunnel.ink';
-const UPSTREAM_ROOT = `http://${UPSTREAM_HOST}`;
-
 async function proxyRequest(request: NextRequest, { params }: { params: Promise<{ slug?: string[] }> }) {
   const { slug } = await params;
+  
+  // Determine Client IP for Sticky Session
+  const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+  const UPSTREAM_ROOT = getUpstreamForClient(clientIp);
+  const UPSTREAM_HOST = getUpstreamHost(UPSTREAM_ROOT);
+
+  console.log(`[Proxy] Client: ${clientIp} -> Assigned Provider: ${UPSTREAM_ROOT}`);
   
   // Construct the target path
   const path = slug ? slug.join('/') : '';

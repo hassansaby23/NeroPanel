@@ -3,7 +3,7 @@ import pool from '@/lib/db';
 import axios from 'axios';
 import redis from '@/lib/redis';
 import crypto from 'crypto';
-import { getActiveUpstreamServer } from '@/lib/server_config';
+import { getUpstreamForClient } from '@/lib/upstream_balancer';
 
 // Helper to generate cache key
 function getCacheKey(prefix: string, params: any) {
@@ -106,18 +106,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ user_info: { auth: 0 }, error: 'Missing credentials' }, { status: 401 });
   }
 
-  // 1. Get Active Upstream Server (Just the URL)
+  // 1. Get Active Upstream Server (Rotated by IP)
   let upstreamUrl = '';
   try {
-    const config = await getActiveUpstreamServer();
-    if (config) {
-      upstreamUrl = config.server_url;
-    } else {
-      console.warn('No active upstream server configured.');
-    }
+    const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+    upstreamUrl = getUpstreamForClient(clientIp);
   } catch (err) {
-    console.error('DB Error', err);
-    return NextResponse.json({ error: 'Database Error' }, { status: 500 });
+    console.error('Upstream Selection Error', err);
+    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
 
     // 2. Authenticate against Upstream (if we have one)
