@@ -20,6 +20,9 @@ function getAbsoluteUrl(url: string | null | undefined, baseUrl: string) {
     return url;
 }
 
+// Global map for Request Coalescing (SingleFlight)
+const pendingRequests = new Map<string, Promise<any>>();
+
 // Helper to fetch upstream content
 async function fetchUpstream(url: string, params: any) {
   // Check Cache for specific actions
@@ -35,48 +38,104 @@ async function fetchUpstream(url: string, params: any) {
       'get_vod_info',
       'get_series_info'
   ];
-  let cacheKey = '';
+
+  const isCacheable = params.action && cacheableActions.includes(params.action);
   
-  if (params.action && cacheableActions.includes(params.action)) {
-       // We want to cache the CONTENT list globally, regardless of which user requested it.
-       // This assumes all users have access to the same upstream channel list.
-       // We exclude username/password from the cache key so all users share the same cache entry.
-       
-       const keyParams = { ...params };
+  // Determine Coalescing Key
+  // If cacheable, we ignore user creds to group all users together.
+  // If not cacheable (e.g. auth), we include creds to group same-user requests.
+  let keyParams = { ...params };
+  if (isCacheable) {
        delete keyParams.username;
        delete keyParams.password;
-       
-       cacheKey = getCacheKey(`upstream:${params.action}`, keyParams);
-       
-       const cached = await redis.get(cacheKey);
-      if (cached) {
-          console.log(`[Cache] Hit for ${cacheKey}`);
-          return JSON.parse(cached);
-      }
+  }
+  const uniqueKey = getCacheKey(`req:${url}`, keyParams);
+
+  // 1. Check for In-Flight Request (SingleFlight)
+  if (pendingRequests.has(uniqueKey)) {
+      console.log(`[Upstream] Coalescing request for ${uniqueKey}`);
+      return pendingRequests.get(uniqueKey);
   }
 
-  const startTime = Date.now();
-  console.log(`[Upstream] Starting fetch: ${url} (Action: ${params.action})`);
-  
-  try {
-    // Use Curl instead of Axios for robust WAF bypass
-    const data = await curlRequest(url, { params });
-    
-    const duration = Date.now() - startTime;
-    const count = Array.isArray(data) ? data.length : 'Object';
-    console.log(`[Upstream] Success in ${duration}ms. Items: ${count}`);
-    
-    // Set Cache
-    if (cacheKey && data) {
-        // Cache for 5 minutes (300 seconds)
-        await redis.setex(cacheKey, 300, JSON.stringify(data));
-    }
+  // 2. Define the Fetch Operation
+  const fetchOperation = async () => {
+      let cacheKey = '';
+      if (isCacheable) {
+           cacheKey = getCacheKey(`upstream:${params.action}`, keyParams);
+           
+           try {
+               const cached = await redis.get(cacheKey);
+               if (cached) {
+                   console.log(`[Cache] Hit for ${cacheKey}`);
+                   return JSON.parse(cached);
+               }
+           } catch (e) {
+               console.error('[Redis] Cache Read Error', e);
+           }
+      }
 
-    return data;
-  } catch (error: any) {
-    const duration = Date.now() - startTime;
-    console.error(`[Upstream] Error after ${duration}ms: ${error.message} | URL: ${url}`);
-    return null;
+      const startTime = Date.now();
+      console.log(`[Upstream] Starting fetch: ${url} (Action: ${params.action})`);
+      
+      // Circuit Breaker Check
+      try {
+          const isBlocked = await redis.get('upstream_403_block');
+          if (isBlocked) {
+              console.warn('[Upstream] Request blocked by Circuit Breaker (Cooling down)');
+              return null; 
+          }
+      } catch (e) {
+          console.error('[Redis] Error checking circuit breaker', e);
+      }
+
+      try {
+        // Use optimized httpClient (mimics curl) for better performance than exec(curl)
+        const response = await httpClient.get(url, { params });
+        const data = response.data;
+        
+        const duration = Date.now() - startTime;
+        const count = Array.isArray(data) ? data.length : 'Object';
+        console.log(`[Upstream] Success in ${duration}ms. Items: ${count}`);
+        
+        // Set Cache
+        if (isCacheable && cacheKey && data) {
+            // Cache for 5 minutes (300 seconds)
+            try {
+                await redis.setex(cacheKey, 300, JSON.stringify(data));
+            } catch (e) {
+                console.error('[Redis] Cache Write Error', e);
+            }
+        }
+
+        return data;
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+        const status = error.response?.status || 'Unknown';
+        const errorData = error.response?.data ? JSON.stringify(error.response.data) : '';
+        console.error(`[Upstream] Error after ${duration}ms: ${error.message} [${status}] Data: ${errorData} | URL: ${url}`);
+        
+        // Circuit Breaker Trigger
+        if (status === 403 || error.message.includes('403')) {
+            console.warn('[Upstream] 403 Detected! Triggering Circuit Breaker for 60 seconds.');
+            try {
+                await redis.setex('upstream_403_block', 60, '1');
+            } catch (e) {
+                console.error('[Redis] Failed to set circuit breaker', e);
+            }
+        }
+
+        return null;
+      }
+  };
+
+  // 3. Execute with Coalescing
+  const promise = fetchOperation();
+  pendingRequests.set(uniqueKey, promise);
+
+  try {
+      return await promise;
+  } finally {
+      pendingRequests.delete(uniqueKey);
   }
 }
 

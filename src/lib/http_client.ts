@@ -12,9 +12,15 @@ const httpClient: AxiosInstance = axios.create({
     timeout: 60000, // 60 seconds default
     httpAgent,
     httpsAgent,
+    // Mimic curl behavior:
+    // 1. No compression
+    // 2. Curl User-Agent
+    // 3. Raw response (no auto JSON parsing if possible, though axios defaults to JSON)
+    decompress: false, 
     headers: {
         'Accept': '*/*',
-        'User-Agent': 'IPTVSmartersPro'
+        'User-Agent': 'curl/7.68.0', // Mimic standard curl
+        'Accept-Encoding': 'identity', // Explicitly disable compression
     },
     // Prevent axios from throwing on 4xx/5xx so we can handle retries manually if needed
     // or let the interceptor handle it.

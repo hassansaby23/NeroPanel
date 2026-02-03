@@ -18,12 +18,16 @@ export async function curlRequest(url: string, options: CurlOptions = {}): Promi
     }
 
     // Build default headers
-    const headers = {
-        'User-Agent': 'IPTVSmartersPro',
+    // Mimic standard curl (no User-Agent or default curl UA) to match successful manual tests
+    const headers: Record<string, string> = {
         'Accept': '*/*',
         ...(options.headers || {})
     };
 
+    // If User-Agent is explicitly set to null/undefined in options, don't send it.
+    // Otherwise, if not provided, don't set it (let curl use default).
+    // If provided in options, use it.
+    
     // Construct Header String
     const headerArgs = Object.entries(headers)
         .map(([key, value]) => `-H "${key}: ${value}"`)
@@ -32,30 +36,50 @@ export async function curlRequest(url: string, options: CurlOptions = {}): Promi
     // Timeout (default 15s)
     const timeout = options.timeout ? Math.ceil(options.timeout / 1000) : 15;
 
+    // Proxy Configuration
+    const proxy = process.env.UPSTREAM_PROXY; // e.g., http://user:pass@host:port or socks5://...
+    const proxyArg = proxy ? `--proxy "${proxy}"` : '';
+
     // Build Command
     // -s: Silent
     // -L: Follow redirects
-    // --insecure: Skip SSL verification (optional, but helpful for some IPTV providers)
+    // --insecure: Skip SSL verification
     // --max-time: Timeout
-    const command = `curl -s -L --insecure --max-time ${timeout} ${headerArgs} "${fullUrl}"`;
+    // -w "%{http_code}": Capture status code at the end
+    const command = `curl -s -L --insecure --max-time ${timeout} ${proxyArg} ${headerArgs} -w "\\n%{http_code}" "${fullUrl}"`;
 
-    console.log(`[Curl] Executing: ${command.replace(/password=[^"&]*/, 'password=***')}`); // Mask password in logs
+    console.log(`[Curl] Executing: ${command.replace(/password=[^"&]*/, 'password=***').replace(/--proxy "[^"]+"/, '--proxy "***"')}`); 
 
     try {
-        const { stdout, stderr } = await execAsync(command);
+        const { stdout, stderr } = await execAsync(command, { maxBuffer: 50 * 1024 * 1024 }); // Increase buffer to 50MB
         
         if (!stdout) {
              console.warn(`[Curl] Empty response. Stderr: ${stderr}`);
              return null;
         }
 
+        // Separate body and status code
+        const lastNewLine = stdout.lastIndexOf('\n');
+        let body = stdout;
+        let statusCode = 200;
+
+        if (lastNewLine !== -1) {
+            const codeStr = stdout.substring(lastNewLine + 1).trim();
+            if (/^\d{3}$/.test(codeStr)) {
+                statusCode = parseInt(codeStr, 10);
+                body = stdout.substring(0, lastNewLine);
+            }
+        }
+
+        if (statusCode >= 400) {
+            throw new Error(`Request failed with status code ${statusCode}`);
+        }
+
         try {
-            return JSON.parse(stdout);
+            return JSON.parse(body);
         } catch (e) {
-            // If response is not JSON, return raw text or handle error
-            // Some IPTV panels return empty string on failure
-            console.warn(`[Curl] Failed to parse JSON. Response: ${stdout.substring(0, 100)}...`);
-            return stdout;
+            console.warn(`[Curl] Failed to parse JSON. Status: ${statusCode}. Body: ${body.substring(0, 100)}...`);
+            return body;
         }
 
     } catch (error: any) {

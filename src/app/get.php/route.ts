@@ -15,15 +15,22 @@ export async function GET(request: Request) {
     const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
     let upstreamUrl = getUpstreamForClient(clientIp);
     if (upstreamUrl.endsWith('/')) upstreamUrl = upstreamUrl.slice(0, -1);
+    
+    // Force HTTPS
+    if (upstreamUrl.startsWith('http://') && !upstreamUrl.includes('diatunnel.ink')) {
+        upstreamUrl = upstreamUrl.replace('http://', 'https://');
+    }
 
     console.log(`[M3U] Fetching playlist from ${upstreamUrl}/get.php`);
 
     const response = await httpClient.get(`${upstreamUrl}/get.php`, {
-      params: Object.fromEntries(searchParams), // Forward all params (type, output, etc.)
-      responseType: 'text',
-      timeout: 120000 // Keep longer timeout for playlist
+      params: Object.fromEntries(searchParams), // Forward all params
+      timeout: 120000,
+      responseType: 'text' // Important for M3U
     });
 
+    let m3uContent = response.data;
+    
     // Replace Upstream URL with Our URL
     // We need to construct our base URL.
     // Since we are in a server component, we can use the request headers.
@@ -31,10 +38,6 @@ export async function GET(request: Request) {
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const myBaseUrl = `${protocol}://${host}`;
 
-    let m3uContent = response.data;
-    
-    // Global replace of the upstream URL with our URL
-    // We try to replace the upstream base URL found in config
     // We also handle cases where upstream might use different ports in the M3U if possible, 
     // but primarily we target the configured upstream URL.
     
