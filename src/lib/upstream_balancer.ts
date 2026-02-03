@@ -1,8 +1,8 @@
 export const PROVIDERS = [
-    'http://hit.hostner.cc',
-    'http://red.openrono.cc',
-    'http://like.ewforo.cc',
-    'http://line.ernoro.cc',
+    'https://hit.hostner.cc',
+    'https://red.openrono.cc',
+    'https://like.ewforo.cc',
+    'https://line.ernoro.cc',
     'http://line.diatunnel.ink'
 ];
 
