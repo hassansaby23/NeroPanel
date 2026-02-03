@@ -23,8 +23,15 @@ export async function GET(request: Request) {
 
     console.log(`[M3U] Fetching playlist from ${upstreamUrl}/get.php`);
 
+    const headers: any = {};
+    if (clientIp && clientIp !== 'unknown') {
+        headers['X-Forwarded-For'] = clientIp;
+        headers['X-Real-IP'] = clientIp;
+    }
+
     const response = await httpClient.get(`${upstreamUrl}/get.php`, {
       params: Object.fromEntries(searchParams), // Forward all params
+      headers,
       timeout: 120000,
       responseType: 'text' // Important for M3U
     });

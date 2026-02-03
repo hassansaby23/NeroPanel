@@ -5,7 +5,8 @@ import https from 'https';
 // 1. Configure Connection Pooling
 // Keep-Alive reduces the overhead of establishing a new TCP connection for every request.
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 100, maxFreeSockets: 10, timeout: 60000 });
-const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 100, maxFreeSockets: 10, timeout: 60000 });
+// rejectUnauthorized: false is equivalent to curl --insecure
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 100, maxFreeSockets: 10, timeout: 60000, rejectUnauthorized: false });
 
 // 2. Create Axios Instance
 const httpClient: AxiosInstance = axios.create({

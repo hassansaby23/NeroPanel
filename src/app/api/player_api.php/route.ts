@@ -24,7 +24,7 @@ function getAbsoluteUrl(url: string | null | undefined, baseUrl: string) {
 const pendingRequests = new Map<string, Promise<any>>();
 
 // Helper to fetch upstream content
-async function fetchUpstream(url: string, params: any) {
+async function fetchUpstream(url: string, params: any, clientIp?: string) {
   // Check Cache for specific actions
   const cacheableActions = [
       'get_live_streams', 
@@ -90,7 +90,14 @@ async function fetchUpstream(url: string, params: any) {
 
       try {
         // Use optimized httpClient (mimics curl) for better performance than exec(curl)
-        const response = await httpClient.get(url, { params });
+        // Pass Client IP in headers like Cloudflare
+        const headers: any = {};
+        if (clientIp && clientIp !== 'unknown') {
+            headers['X-Forwarded-For'] = clientIp;
+            headers['X-Real-IP'] = clientIp;
+        }
+
+        const response = await httpClient.get(url, { params, headers });
         const data = response.data;
         
         const duration = Date.now() - startTime;
@@ -191,7 +198,7 @@ export async function GET(request: Request) {
         authData = await fetchUpstream(`${upstreamUrl}/player_api.php`, {
           username,
           password
-        });
+        }, clientIp);
         
         // Cache if successful
         if (authData && authData.user_info && authData.user_info.auth === 1) {
@@ -227,7 +234,7 @@ export async function GET(request: Request) {
           username,
           password,
           action: 'get_vod_streams'
-        }),
+        }, clientIp),
         pool.query(
           `SELECT id, title as name, poster_url as stream_icon, stream_url, metadata, category_id, stream_id
            FROM local_content
