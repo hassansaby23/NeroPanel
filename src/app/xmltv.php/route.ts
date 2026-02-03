@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 import { getUpstreamForClient } from '@/lib/upstream_balancer';
 
 export async function GET(request: Request) {
@@ -18,13 +18,10 @@ export async function GET(request: Request) {
 
     console.log(`[XMLTV] Fetching EPG from ${upstreamUrl}/xmltv.php`);
 
-    const response = await axios.get(`${upstreamUrl}/xmltv.php`, {
+    const response = await httpClient.get(`${upstreamUrl}/xmltv.php`, {
       params: { username, password },
       responseType: 'arraybuffer', // Use arraybuffer to preserve encoding
-      timeout: 120000, // 2 minutes timeout
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
+      timeout: 120000 // 2 minutes timeout
     });
 
     const headers = new Headers();

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 import redis from '@/lib/redis';
 import crypto from 'crypto';
 import { getUpstreamForClient } from '@/lib/upstream_balancer';
@@ -58,15 +58,10 @@ async function fetchUpstream(url: string, params: any) {
   console.log(`[Upstream] Starting fetch: ${url} (Action: ${params.action})`);
   
   try {
-    const response = await axios.get(url, { 
+    const response = await httpClient.get(url, { 
       params, 
-      timeout: 60000, // Increased to 60s for large lists
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Connection': 'keep-alive'
-      },
-      maxBodyLength: Infinity, // Allow large responses
+      // timeout is handled by default in httpClient, but we can override if needed
+      maxBodyLength: Infinity, 
       maxContentLength: Infinity
     });
     
@@ -121,11 +116,35 @@ export async function GET(request: Request) {
   let upstreamServerInfo = null;
 
   if (upstreamUrl) {
-    // Check auth by calling the standard userInfo action (no action param or action=login)
-    const authData = await fetchUpstream(`${upstreamUrl}/player_api.php`, {
-      username,
-      password
-    });
+    // Try to get cached auth first
+    const authCacheKey = getCacheKey('auth', { username, password, upstreamUrl });
+    let authData = null;
+    
+    try {
+        const cachedAuth = await redis.get(authCacheKey);
+        if (cachedAuth) {
+            authData = JSON.parse(cachedAuth);
+        }
+    } catch (e) {
+        console.error('[Cache] Auth Read Error', e);
+    }
+
+    if (!authData) {
+        // Check auth by calling the standard userInfo action (no action param or action=login)
+        authData = await fetchUpstream(`${upstreamUrl}/player_api.php`, {
+          username,
+          password
+        });
+        
+        // Cache if successful
+        if (authData && authData.user_info && authData.user_info.auth === 1) {
+            try {
+                await redis.setex(authCacheKey, 600, JSON.stringify(authData)); // 10 minutes
+            } catch (e) {
+                console.error('[Cache] Auth Write Error', e);
+            }
+        }
+    }
 
     if (authData && authData.user_info && authData.user_info.auth === 1) {
       upstreamUserInfo = authData.user_info;

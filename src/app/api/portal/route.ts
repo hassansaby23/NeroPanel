@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 import pool from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
@@ -96,7 +96,7 @@ async function handleProxy(request: NextRequest) {
   if (action && interceptActions.includes(action)) {
       try {
           // Fetch JSON directly
-          const response = await axios({
+          const response = await httpClient({
               method: request.method,
               url: targetUrl,
               headers: requestHeaders,
@@ -142,7 +142,7 @@ async function handleProxy(request: NextRequest) {
 
   // 4. Standard Proxy Logic (Stream/Binary/Pass-through)
   try {
-    const response = await axios({
+    const response = await httpClient({
       method: request.method,
       url: targetUrl,
       headers: requestHeaders,
