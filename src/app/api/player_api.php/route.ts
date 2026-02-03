@@ -106,6 +106,10 @@ export async function GET(request: Request) {
   try {
     const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
     upstreamUrl = getUpstreamForClient(clientIp);
+    // Force HTTPS for known providers that support it, to avoid 403/WAF issues
+    if (upstreamUrl.startsWith('http://') && !upstreamUrl.includes('diatunnel.ink')) {
+        upstreamUrl = upstreamUrl.replace('http://', 'https://');
+    }
   } catch (err) {
     console.error('Upstream Selection Error', err);
     return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
@@ -151,6 +155,8 @@ export async function GET(request: Request) {
       upstreamServerInfo = authData.server_info;
     } else {
       // Auth failed at upstream
+      // Check if authData is actually valid JSON but indicates failure
+      console.warn('[Upstream] Auth failed. Response:', JSON.stringify(authData));
        return NextResponse.json({ user_info: { auth: 0 }, error: 'Authentication failed at upstream' }, { status: 401 });
     }
   } else {
