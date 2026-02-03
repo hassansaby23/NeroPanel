@@ -18,7 +18,7 @@ if (process.env.DATABASE_URL) {
 
 const pool = global.pool || new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: parseInt(process.env.DB_MAX_CONNECTIONS || '50'), // Increased default for higher concurrency
+  max: parseInt(process.env.DB_MAX_CONNECTIONS || '200'), // Increased for high concurrency (3000 users)
   idleTimeoutMillis: 30000, 
   connectionTimeoutMillis: 5000, 
 });

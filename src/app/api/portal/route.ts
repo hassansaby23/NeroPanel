@@ -459,9 +459,24 @@ async function modifyVodList(data: any, request: NextRequest) {
 
 async function modifySeriesList(data: any, request: NextRequest) {
     try {
-        // Placeholder for future Series modification
-        // Currently just returns data to prevent modifyChannels from breaking pagination
-        // In the future, we can inject local series here if needed.
+        const list = data?.js?.data || [];
+        const category = request.nextUrl.searchParams.get('category');
+
+        // Only inject if we are looking at "All" categories or a specific logic that matches local content
+        // Usually '0' or '*' or missing means ALL.
+        if (!category || category === '*' || category === '0') {
+             const localContent = await fetchLocalVodContent(request, undefined, 'series');
+             
+             // Merge
+             data.js.data = [...list, ...localContent];
+             
+             // Update total_items only if it seems to be a full list or we want to support pagination "hack"
+             // If we inject items, we effectively increase the total.
+             if (data.js.total_items) {
+                 data.js.total_items += localContent.length;
+             }
+        }
+        
         return data;
     } catch (e) {
         console.error('[ProxyRoot] Error modifying Series list:', e);
