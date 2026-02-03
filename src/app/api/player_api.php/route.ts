@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import httpClient from '@/lib/http_client';
+import { curlRequest } from '@/lib/curl';
 import redis from '@/lib/redis';
 import crypto from 'crypto';
 import { getUpstreamForClient } from '@/lib/upstream_balancer';
@@ -58,30 +59,23 @@ async function fetchUpstream(url: string, params: any) {
   console.log(`[Upstream] Starting fetch: ${url} (Action: ${params.action})`);
   
   try {
-    const response = await httpClient.get(url, { 
-      params, 
-      // timeout is handled by default in httpClient, but we can override if needed
-      maxBodyLength: Infinity, 
-      maxContentLength: Infinity
-    });
+    // Use Curl instead of Axios for robust WAF bypass
+    const data = await curlRequest(url, { params });
     
     const duration = Date.now() - startTime;
-    const count = Array.isArray(response.data) ? response.data.length : 'Object';
+    const count = Array.isArray(data) ? data.length : 'Object';
     console.log(`[Upstream] Success in ${duration}ms. Items: ${count}`);
     
     // Set Cache
-    if (cacheKey && response.data) {
+    if (cacheKey && data) {
         // Cache for 5 minutes (300 seconds)
-        await redis.setex(cacheKey, 300, JSON.stringify(response.data));
+        await redis.setex(cacheKey, 300, JSON.stringify(data));
     }
 
-    return response.data;
+    return data;
   } catch (error: any) {
     const duration = Date.now() - startTime;
-    // Log more details about the error
-    const status = error.response?.status || 'Unknown';
-    const statusText = error.response?.statusText || error.message;
-    console.error(`[Upstream] Error after ${duration}ms [${status}]: ${statusText} | URL: ${url}`);
+    console.error(`[Upstream] Error after ${duration}ms: ${error.message} | URL: ${url}`);
     return null;
   }
 }
