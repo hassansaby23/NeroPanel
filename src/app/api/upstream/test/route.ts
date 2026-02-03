@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 import { z } from 'zod';
 
 const testSchema = z.object({
@@ -29,14 +29,10 @@ export async function POST(request: Request) {
       if (username) params.username = username;
       if (password) params.password = password;
 
-      const response = await axios.get(apiUrl, {
+      const response = await httpClient.get(apiUrl, {
         params,
         timeout: 10000, // 10s timeout for test
         validateStatus: () => true, // Accept any status code, don't throw error
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': '*/*'
-        }
       });
 
       // Case 1: Full Auth Success (user/pass provided)

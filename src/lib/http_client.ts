@@ -13,10 +13,11 @@ const httpClient: AxiosInstance = axios.create({
     httpAgent,
     httpsAgent,
     headers: {
-        // Standardize User-Agent to avoid WAF blocks
-        'User-Agent': 'IPTVSmartersPro',
+        // Use standard Android http client User-Agent which is less likely to be blocked than "IPTVSmartersPro"
+        'User-Agent': 'okhttp/4.12.0', 
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'Accept-Encoding': 'gzip, deflate' // Important for WAFs to see us as a real client
     },
     // Prevent axios from throwing on 4xx/5xx so we can handle retries manually if needed
     // or let the interceptor handle it.

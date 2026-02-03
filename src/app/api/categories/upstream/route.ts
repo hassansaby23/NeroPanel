@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const apiUrl = `${server_url}/player_api.php`;
 
     // 2. Fetch from Upstream
-    const response = await axios.get(apiUrl, {
+    const response = await httpClient.get(apiUrl, {
       params: {
         username,
         password,

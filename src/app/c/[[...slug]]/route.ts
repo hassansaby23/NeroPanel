@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 import { getUpstreamForClient, getUpstreamHost } from '@/lib/upstream_balancer';
 
 export const dynamic = 'force-dynamic';
@@ -77,7 +77,7 @@ async function proxyRequest(request: NextRequest, { params }: { params: Promise<
 
   try {
     // 3. Send Request to Upstream
-    const response = await axios({
+    const response = await httpClient({
       method: request.method,
       url: targetUrl,
       headers: requestHeaders,

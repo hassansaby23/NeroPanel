@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || '73d2519f33d84184449e657fafca9352'; // Fallback to provided key
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const response = await axios.get(`${BASE_URL}/${type}/${id}`, {
+    const response = await httpClient.get(`${BASE_URL}/${type}/${id}`, {
       params: {
         api_key: TMDB_API_KEY,
         language: 'en-US',

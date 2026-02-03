@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import axios from 'axios';
+import httpClient from '@/lib/http_client';
 import { PROVIDERS } from '@/lib/upstream_balancer';
 
 export async function POST(request: Request) {
@@ -50,11 +50,11 @@ export async function POST(request: Request) {
               const apiUrl = `${baseUrl}/player_api.php`;
               
               const [vRes, sRes] = await Promise.all([
-                  axios.get(apiUrl, {
+                  httpClient.get(apiUrl, {
                       params: { username, password, action: 'get_vod_streams' },
                       timeout: 60000 
                   }),
-                  axios.get(apiUrl, {
+                  httpClient.get(apiUrl, {
                       params: { username, password, action: 'get_series' },
                       timeout: 60000
                   })
