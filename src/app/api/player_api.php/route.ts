@@ -163,8 +163,9 @@ export async function GET(request: Request) {
 
   // 1. Get Active Upstream Server (Rotated by IP)
   let upstreamUrl = '';
+  let clientIp = 'unknown';
   try {
-    const clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
+    clientIp = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
     upstreamUrl = getUpstreamForClient(clientIp);
     // Force HTTPS for known providers that support it, to avoid 403/WAF issues
     if (upstreamUrl.startsWith('http://') && !upstreamUrl.includes('diatunnel.ink')) {
