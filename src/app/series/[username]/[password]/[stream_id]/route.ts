@@ -22,10 +22,18 @@ export async function GET(
     const cleanId = stream_id.replace(/\.[^/.]+$/, "");
     
     // Check local_episodes table first
-    const episodeRes = await pool.query(
-        'SELECT stream_url FROM local_episodes WHERE stream_id = $1',
-        [cleanId]
-    );
+    let episodeRes;
+    try {
+      episodeRes = await pool.query(
+          'SELECT stream_url FROM local_episodes WHERE stream_id = $1',
+          [cleanId]
+      );
+    } catch (dbError: any) {
+      // Log warning but proceed to upstream logic
+      // This prevents failure if local_episodes table is missing or query fails
+      console.warn(`[SeriesRedirect] Local episode check failed for ${cleanId}, proceeding to upstream:`, dbError.message);
+      episodeRes = { rowCount: 0, rows: [] };
+    }
 
     if (episodeRes.rowCount && episodeRes.rowCount > 0) {
         const targetUrl = episodeRes.rows[0].stream_url;
