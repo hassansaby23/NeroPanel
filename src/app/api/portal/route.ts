@@ -124,6 +124,8 @@ async function handleProxy(request: NextRequest) {
                    const type = request.nextUrl.searchParams.get('type');
                    if (type === 'vod') {
                        data = await modifyVodList(data, request);
+                   } else if (type === 'series') {
+                       data = await modifySeriesList(data, request);
                    } else {
                        data = await modifyChannels(data, request);
                    }
@@ -335,7 +337,9 @@ async function modifyChannels(data: any, request: NextRequest) {
         
         data.js.data = filteredChannels;
         // Update total items count if present
-        if (data.js.total_items) {
+        // Only update total_items if it matches the data length (implying non-paginated response)
+        // Otherwise, if total_items > data.length, it's paginated, and updating it would break pagination.
+        if (data.js.total_items && data.js.total_items === channels.length) {
             data.js.total_items = filteredChannels.length;
         }
 
@@ -437,7 +441,8 @@ async function modifyVodList(data: any, request: NextRequest) {
         // Or check if the category param is missing or '*'
         const category = request.nextUrl.searchParams.get('category');
         if (!category || category === '*' || category === '0') {
-             const localContent = await fetchLocalVodContent(request);
+             // Only fetch Movies for the main VOD list to avoid series episodes appearing as movies
+             const localContent = await fetchLocalVodContent(request, undefined, 'movie');
              // Merge
              data.js.data = [...list, ...localContent];
              if (data.js.total_items) {
@@ -448,6 +453,18 @@ async function modifyVodList(data: any, request: NextRequest) {
         return data;
     } catch (e) {
         console.error('[ProxyRoot] Error modifying VOD list:', e);
+        return data;
+    }
+}
+
+async function modifySeriesList(data: any, request: NextRequest) {
+    try {
+        // Placeholder for future Series modification
+        // Currently just returns data to prevent modifyChannels from breaking pagination
+        // In the future, we can inject local series here if needed.
+        return data;
+    } catch (e) {
+        console.error('[ProxyRoot] Error modifying Series list:', e);
         return data;
     }
 }
@@ -485,82 +502,91 @@ async function handleLocalVodList(category: string, request: NextRequest) {
     }
 }
 
-async function fetchLocalVodContent(request: NextRequest, categoryName?: string) {
+// Helper to format date for Stalker (Unix Timestamp in seconds)
+function formatDateForStalker(dateInput: any): number {
+    if (!dateInput) return 0;
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return 0;
+    return Math.floor(d.getTime() / 1000); // Return seconds
+}
+
+async function fetchLocalVodContent(request: NextRequest, categoryName?: string, contentType: 'movie' | 'series' | 'all' = 'all') {
     const host = request.headers.get('host') || 'localhost';
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const baseUrl = `${protocol}://${host}`;
 
-    // 1. Fetch Movies
-    let movieQuery = 'SELECT id, title, stream_id, poster_url, created_at, stream_url FROM local_content WHERE content_type = $1';
-    const movieParams: any[] = ['movie'];
-    
-    if (categoryName) {
-        movieQuery += ' AND category_name = $2';
-        movieParams.push(categoryName);
-    }
-    
-    // 2. Fetch Episodes (Series)
-    // We need to join with local_content to get the Series info (like Category) if we filter by category
-    let seriesQuery = `
-        SELECT 
-            e.id, 
-            c.title as series_title, 
-            e.season_num, 
-            e.episode_num, 
-            e.stream_id, 
-            c.poster_url, 
-            e.created_at, 
-            e.stream_url 
-        FROM local_episodes e
-        JOIN local_content c ON e.series_id = c.id
-        WHERE c.content_type = 'series'
-    `;
-    
-    const seriesParams: any[] = [];
-    
-    if (categoryName) {
-        seriesQuery += ' AND c.category_name = $1';
-        seriesParams.push(categoryName);
-    }
-
-    const [moviesRes, seriesRes] = await Promise.all([
-        pool.query(movieQuery + ' ORDER BY created_at DESC', movieParams),
-        pool.query(seriesQuery + ' ORDER BY e.created_at DESC', seriesParams)
-    ]);
-
     const items: any[] = [];
 
-    // Process Movies
-    moviesRes.rows.forEach(row => {
-        let streamUrl = row.stream_url;
-        if (streamUrl.startsWith('/')) {
-            streamUrl = `${baseUrl}${streamUrl}`;
+    // 1. Fetch Movies (if requested)
+    if (contentType === 'all' || contentType === 'movie') {
+        let movieQuery = 'SELECT id, title, stream_id, poster_url, created_at, stream_url FROM local_content WHERE content_type = $1';
+        const movieParams: any[] = ['movie'];
+        
+        if (categoryName) {
+            movieQuery += ' AND category_name = $2';
+            movieParams.push(categoryName);
         }
-        items.push({
-            id: Number(row.stream_id) || Math.floor(Math.random() * 100000000),
-            name: row.title,
-            cmd: `local:${row.stream_id}`,
-            screenshot_uri: row.poster_url,
-            added: row.created_at,
-            hd: 1
-        });
-    });
 
-    // Process Episodes
-    seriesRes.rows.forEach(row => {
-        let streamUrl = row.stream_url;
-        if (streamUrl.startsWith('/')) {
-            streamUrl = `${baseUrl}${streamUrl}`;
-        }
-        items.push({
-            id: Number(row.stream_id) || Math.floor(Math.random() * 100000000),
-            name: `${row.series_title} - S${row.season_num} E${row.episode_num}`,
-            cmd: `local:${row.stream_id}`,
-            screenshot_uri: row.poster_url,
-            added: row.created_at,
-            hd: 1
+        const moviesRes = await pool.query(movieQuery + ' ORDER BY created_at DESC', movieParams);
+        
+        moviesRes.rows.forEach(row => {
+            let streamUrl = row.stream_url;
+            if (streamUrl.startsWith('/')) {
+                streamUrl = `${baseUrl}${streamUrl}`;
+            }
+            items.push({
+                id: Number(row.stream_id) || Math.floor(Math.random() * 100000000),
+                name: row.title,
+                cmd: `local:${row.stream_id}`,
+                screenshot_uri: row.poster_url,
+                added: formatDateForStalker(row.created_at),
+                hd: 1
+            });
         });
-    });
+    }
+    
+    // 2. Fetch Episodes/Series (if requested)
+    // We need to join with local_content to get the Series info (like Category) if we filter by category
+    if (contentType === 'all' || contentType === 'series') {
+        let seriesQuery = `
+            SELECT 
+                e.id, 
+                c.title as series_title, 
+                e.season_num, 
+                e.episode_num, 
+                e.stream_id, 
+                c.poster_url, 
+                e.created_at, 
+                e.stream_url 
+            FROM local_episodes e
+            JOIN local_content c ON e.series_id = c.id
+            WHERE c.content_type = 'series'
+        `;
+        
+        const seriesParams: any[] = [];
+        
+        if (categoryName) {
+            seriesQuery += ' AND c.category_name = $1';
+            seriesParams.push(categoryName);
+        }
+
+        const seriesRes = await pool.query(seriesQuery + ' ORDER BY e.created_at DESC', seriesParams);
+        
+        seriesRes.rows.forEach(row => {
+            let streamUrl = row.stream_url;
+            if (streamUrl.startsWith('/')) {
+                streamUrl = `${baseUrl}${streamUrl}`;
+            }
+            items.push({
+                id: Number(row.stream_id) || Math.floor(Math.random() * 100000000),
+                name: `${row.series_title} - S${row.season_num} E${row.episode_num}`,
+                cmd: `local:${row.stream_id}`,
+                screenshot_uri: row.poster_url,
+                added: formatDateForStalker(row.created_at),
+                hd: 1
+            });
+        });
+    }
     
     return items;
 }
