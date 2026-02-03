@@ -31,4 +31,31 @@ const httpClient: AxiosInstance = axios.create({
     validateStatus: (status) => status >= 200 && status < 300
 });
 
+// Add Logging Interceptor
+httpClient.interceptors.request.use((config) => {
+    // Construct full URL with params for visibility
+    let fullUrl = config.url;
+    if (config.params) {
+        const usp = new URLSearchParams(config.params);
+        fullUrl += `?${usp.toString()}`;
+    }
+    console.log(`[HttpClient] Request: ${config.method?.toUpperCase()} ${fullUrl}`);
+    return config;
+});
+
+httpClient.interceptors.response.use(
+    (response) => {
+        console.log(`[HttpClient] Response [${response.status}]: ${response.config.url}`);
+        return response;
+    },
+    (error) => {
+        if (error.response) {
+            console.error(`[HttpClient] Error [${error.response.status}]: ${error.config?.url}`);
+        } else {
+            console.error(`[HttpClient] Network Error: ${error.message} | URL: ${error.config?.url}`);
+        }
+        return Promise.reject(error);
+    }
+);
+
 export default httpClient;
