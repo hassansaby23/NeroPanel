@@ -391,6 +391,25 @@ async function modifyVodGenres(data: any) {
         const genres = data?.js?.data || data?.js || [];
         if (!Array.isArray(genres)) return data;
 
+        // Cache upstream categories to DB for mapping
+        try {
+            // Use batch upsert or loop. Loop is fine for < 100 genres.
+            for (const g of genres) {
+                if (g.id && g.title) {
+                     // Upsert
+                     await pool.query(
+                         `INSERT INTO upstream_categories (category_id, category_name, category_type, updated_at)
+                          VALUES ($1, $2, 'vod', NOW())
+                          ON CONFLICT (category_id, category_type) 
+                          DO UPDATE SET category_name = EXCLUDED.category_name, updated_at = NOW()`,
+                         [String(g.id), g.title]
+                     );
+                }
+            }
+        } catch (dbErr) {
+            console.error('[ProxyRoot] Error caching upstream genres:', dbErr);
+        }
+
         // Add Local Content Category
         genres.push({
             id: 'local_vod_all',
@@ -405,6 +424,9 @@ async function modifyVodGenres(data: any) {
              if (row.category_name) {
                  // Encode category name in ID to allow stateless filtering later
                  const safeId = `local_cat_${Buffer.from(row.category_name).toString('hex')}`;
+                 // Check if this category already exists in upstream to avoid duplicates?
+                 // Usually user wants them separate unless we mix them.
+                 // We add them as separate "Local - X" categories for explicit browsing.
                  genres.push({
                      id: safeId,
                      title: `Local - ${row.category_name}`,
@@ -430,19 +452,36 @@ async function modifyVodList(data: any, request: NextRequest) {
     try {
         const list = data?.js?.data || [];
         
-        // If the request was for ALL, we append.
-        // If the request was for specific upstream category, we leave it (unless we want to mix).
-        // Here we just append all local content to the list if the list is not empty or if it's the "All" category.
-        
-        // Note: The caller handles "local-only" categories via handleLocalVodList. 
-        // This function intercepts the upstream response, so it's for "All" or "Upstream Category".
-        
-        // Let's just append local content if the list exists (e.g. "All Movies").
-        // Or check if the category param is missing or '*'
         const category = request.nextUrl.searchParams.get('category');
+        let categoryName: string | undefined = undefined;
+
+        // 1. Determine if we should inject local content
+        let shouldInject = false;
+
         if (!category || category === '*' || category === '0') {
+             shouldInject = true;
+        } else {
+             // Check if it's a specific upstream category
+             // Look up name in DB
+             try {
+                 const catRes = await pool.query(
+                     'SELECT category_name FROM upstream_categories WHERE category_id = $1 AND category_type = $2',
+                     [category, 'vod']
+                 );
+                 if (catRes.rowCount && catRes.rowCount > 0) {
+                     categoryName = catRes.rows[0].category_name;
+                     shouldInject = true;
+                 }
+             } catch (e) {
+                 console.warn('[ProxyRoot] Failed to lookup upstream category:', e);
+             }
+        }
+
+        if (shouldInject) {
              // Only fetch Movies for the main VOD list to avoid series episodes appearing as movies
-             const localContent = await fetchLocalVodContent(request, undefined, 'movie');
+             // Pass categoryName if found
+             const localContent = await fetchLocalVodContent(request, categoryName, 'movie');
+             
              // Merge
              data.js.data = [...list, ...localContent];
              if (data.js.total_items) {
@@ -461,11 +500,33 @@ async function modifySeriesList(data: any, request: NextRequest) {
     try {
         const list = data?.js?.data || [];
         const category = request.nextUrl.searchParams.get('category');
+        let categoryName: string | undefined = undefined;
+
+        // 1. Determine if we should inject local content
+        let shouldInject = false;
 
         // Only inject if we are looking at "All" categories or a specific logic that matches local content
         // Usually '0' or '*' or missing means ALL.
         if (!category || category === '*' || category === '0') {
-             const localContent = await fetchLocalVodContent(request, undefined, 'series');
+             shouldInject = true;
+        } else {
+             // Check upstream category mapping
+             try {
+                 const catRes = await pool.query(
+                     'SELECT category_name FROM upstream_categories WHERE category_id = $1 AND category_type = $2',
+                     [category, 'vod']
+                 );
+                 if (catRes.rowCount && catRes.rowCount > 0) {
+                     categoryName = catRes.rows[0].category_name;
+                     shouldInject = true;
+                 }
+             } catch (e) {
+                 console.warn('[ProxyRoot] Failed to lookup upstream category for series:', e);
+             }
+        }
+        
+        if (shouldInject) {
+             const localContent = await fetchLocalVodContent(request, categoryName, 'series');
              
              // Merge
              data.js.data = [...list, ...localContent];

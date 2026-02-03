@@ -134,3 +134,15 @@ CREATE TABLE IF NOT EXISTS category_overrides (
 
 -- create indexes
 CREATE INDEX IF NOT EXISTS idx_category_overrides_category_id ON category_overrides(category_id);
+
+-- create table
+CREATE TABLE IF NOT EXISTS upstream_categories (
+    category_id VARCHAR(50) NOT NULL,
+    category_name VARCHAR(255) NOT NULL,
+    category_type VARCHAR(20) NOT NULL, -- 'vod', 'live'
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (category_id, category_type)
+);
+
+-- create indexes
+CREATE INDEX IF NOT EXISTS idx_upstream_categories_name ON upstream_categories(category_name);
