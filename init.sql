@@ -67,14 +67,31 @@ CREATE TABLE IF NOT EXISTS local_content (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-
-
 -- create indexes
 CREATE INDEX IF NOT EXISTS idx_local_content_type ON local_content(content_type);
 CREATE INDEX IF NOT EXISTS idx_local_content_category ON local_content(category_id);
 CREATE INDEX IF NOT EXISTS idx_local_content_stream_id ON local_content(stream_id);
 CREATE INDEX IF NOT EXISTS idx_local_content_created_at ON local_content(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_local_content_created_by ON local_content(created_by);
+
+-- create table
+CREATE TABLE IF NOT EXISTS local_episodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    series_id UUID REFERENCES local_content(id) ON DELETE CASCADE,
+    season_num INTEGER NOT NULL,
+    episode_num INTEGER NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    stream_url TEXT NOT NULL,
+    stream_id VARCHAR(100) UNIQUE NOT NULL,
+    container_extension VARCHAR(10) DEFAULT 'mp4',
+    duration VARCHAR(20) DEFAULT '00:00:00',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- create indexes
+CREATE INDEX IF NOT EXISTS idx_local_episodes_series ON local_episodes(series_id);
+CREATE INDEX IF NOT EXISTS idx_local_episodes_stream_id ON local_episodes(stream_id);
 
 -- create table
 CREATE TABLE IF NOT EXISTS content_routing (
